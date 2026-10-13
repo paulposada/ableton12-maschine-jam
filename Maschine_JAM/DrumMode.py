@@ -138,6 +138,10 @@ class DrumMode(MaschineMode):
 
     def navigate(self, nav_dir, modifier, alt_modifier=False, nav_source=0):
         if self.device and self.device.view:
+            # modifier == 1 -> flechas arriba/abajo (arriba envia -1): se invierte
+            # para que "arriba" suba el overview; izquierda/derecha no cambian
+            if modifier == 1:
+                nav_dir = -nav_dir
             self.device.view.drum_pads_scroll_position = max(0, min(28,
                 self.device.view.drum_pads_scroll_position + nav_dir))
 

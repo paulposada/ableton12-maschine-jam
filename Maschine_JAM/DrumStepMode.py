@@ -368,8 +368,10 @@ class DrumStepMode(MaschineMode):
                 self._assign_notes()
                 self._page_handler.update_buttons()
         elif self.device and self.device.view:
+            # Flechas arriba/abajo: drum_pads_scroll_position cuenta desde las
+            # notas graves, asi que se invierte para que "arriba" suba el overview
             self.device.view.drum_pads_scroll_position = max(0, min(28,
-             self.device.view.drum_pads_scroll_position + nav_dir))
+             self.device.view.drum_pads_scroll_position - nav_dir))
 
     def hande_drum_pad_selection(self, index, value):
         if value and self.device:
