@@ -702,8 +702,8 @@ class ControlSurface(Subject, SlotManager):
                                include_return_tracks):
 
         if list((track_offset, scene_offset, width, height)).count(-1) != 4:
-            if False:  # original body was an assert stripped by -OO compilation
-                pass
+            assert track_offset >= 0 and scene_offset >= 0  # assert body reconstructed (stripped by -OO)
+            assert width >= 0 and height >= 0
 
         self._c_instance.set_session_highlight(
             track_offset, scene_offset, width, height, include_return_tracks)
