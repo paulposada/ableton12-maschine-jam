@@ -61,8 +61,8 @@ CC_OVERDUB = 31           # OUT der.    -> Arrangement Overdub (MIDI +)
 # Botones FX: vistas
 CC_VIEW_BROWSER = 20      # FX1 izq.    -> Mostrar / ocultar Browser
 CC_VIEW_SESSION_ARR = 22  # FX2 izq.    -> Session <-> Arrangement
-CC_VIEW_DETAIL = 21       # FX1 der.    -> Mostrar / ocultar Detail
-CC_VIEW_CLIP_DEVICE = 23  # FX2 der.    -> Detail: Clip <-> Devices
+CC_VIEW_CLIP = 21         # FX1 der.    -> Mostrar / ocultar vista Clip
+CC_VIEW_DEVICES = 23      # FX2 der.    -> Mostrar / ocultar vista Devices
 
 # Encoders inferiores: browser
 CC_BROWSER_VERTICAL = 26  # Giro izq.   -> Subir / bajar
@@ -295,8 +295,8 @@ class TraktorKontrolX1(ControlSurface):
     def _setup_actions(self):
         self._action_button(CC_VIEW_BROWSER, self._toggle_browser)
         self._action_button(CC_VIEW_SESSION_ARR, self._toggle_session_arrangement)
-        self._action_button(CC_VIEW_DETAIL, self._toggle_detail)
-        self._action_button(CC_VIEW_CLIP_DEVICE, self._toggle_clip_device)
+        self._action_button(CC_VIEW_CLIP, lambda: self._toggle_view('Detail/Clip'))
+        self._action_button(CC_VIEW_DEVICES, lambda: self._toggle_view('Detail/DeviceChain'))
 
     # --- Encoders ------------------------------------------------------------
 
@@ -388,19 +388,13 @@ class TraktorKontrolX1(ControlSurface):
         app_view = self.application().view
         app_view.show_view('Arranger' if app_view.is_view_visible('Session') else 'Session')
 
-    def _toggle_detail(self):
+    def _toggle_view(self, view_name):
+        # En Live 12 Clip y Devices se muestran a la vez: cada boton es un interruptor propio
         app_view = self.application().view
-        if app_view.is_view_visible('Detail'):
-            app_view.hide_view('Detail')
+        if app_view.is_view_visible(view_name):
+            app_view.hide_view(view_name)
         else:
-            app_view.show_view('Detail')
-
-    def _toggle_clip_device(self):
-        app_view = self.application().view
-        if app_view.is_view_visible('Detail/Clip'):
-            app_view.show_view('Detail/DeviceChain')
-        else:
-            app_view.show_view('Detail/Clip')
+            app_view.show_view(view_name)
 
     # --- Debug ---------------------------------------------------------------
 

@@ -66,8 +66,8 @@ Template **Basic** del Controller Editor, todo por el **Canal MIDI 2**. Cada dec
 |---|---|---|
 | FX1 izq. | 20 | Mostrar / ocultar Browser |
 | FX2 izq. | 22 | Session ⇄ Arrangement |
-| FX1 der. | 21 | Mostrar / ocultar Detail |
-| FX2 der. | 23 | Detail: Clip ⇄ Devices |
+| FX1 der. | 21 | Mostrar / ocultar vista Clip |
+| FX2 der. | 23 | Mostrar / ocultar vista Devices |
 
 ### 4. Encoders inferiores — Browser
 Cualquier giro o push le da el foco al Browser (ya no hace falta hacer click en él).
