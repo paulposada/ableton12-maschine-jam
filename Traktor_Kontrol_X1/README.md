@@ -105,7 +105,7 @@ Las perillas controlan el device que tiene la "mano azul" (sigue a la pista y al
 
 En modo Sends las perillas siguen a la pista seleccionada; si la pista tiene menos returns, las perillas sobrantes no hacen nada.
 
-Para cambiar una asignación, edita las constantes `CC_*` al inicio de `TraktorKontrolX1.py`. Para depurar, pon `DEBUG_MIDI = True` y el script escribirá en `Log.txt` todo el MIDI que recibe.
+Para cambiar una asignación, edita el número en `config.py`. Para depurar, pon `DEBUG_MIDI = True` en `config.py` y el script escribirá en `Log.txt` todo el MIDI que recibe.
 
 ---
 
@@ -116,6 +116,29 @@ Al cargar el script, **todos los LEDs se encienden medio segundo** (prueba de qu
 * **Botones de acción** (Undo/Redo, navegación de devices/pistas, bancos, Tap): se encienden mientras los mantienes presionados.
 
 Requisitos en el Controller Editor: cada botón con **LED On: For MIDI In**, y en Ableton el **Output** del Control Surface en `Traktor Kontrol X1 - 2`.
+
+---
+
+## 🧩 Estructura del código
+
+| Archivo | Responsabilidad |
+|---|---|
+| `__init__.py` | Punto de entrada de Live (`create_instance`) |
+| `TraktorKontrolX1.py` | Ensambla todas las piezas, una sección del controlador por método `_setup_*` |
+| `config.py` | Canal, modos MIDI y **mapa de CC** agrupado por sección (aquí se reasignan los controles) |
+| `elements.py` | Fábrica de botones, encoders y perillas |
+| `actions.py` | Botón → acción (patrón Command) con su LED |
+| `feedback.py` | LEDs que reflejan estados de Live |
+| `listeners.py` | Registro de listeners para desconectarlos limpiamente |
+| `song_actions.py` | Undo/Redo, Capture MIDI, Follow, Arm |
+| `selection.py` | Pista / device anterior y siguiente |
+| `knob_modes.py` | Modos de las perillas: Macros ⇄ Sends (patrón State) |
+| `browser.py` / `arrangement.py` | Componentes de los encoders |
+| `views.py` / `navigation.py` | Utilidades de vistas y de navegación |
+| `live_keys.py` + `send_keys.vbs` | Envío de Enter/→ a Live para cargar y preescuchar (solo Windows) |
+| `midi_debug.py` | Depuración de MIDI (`DEBUG_MIDI` en `config.py`) |
+
+Al instalar, copia **toda la carpeta** (todos los `.py` y `send_keys.vbs`).
 
 ---
 

@@ -1,518 +1,226 @@
-import os
-import subprocess
-import sys
+"""Control Surface de Ableton Live 12 para el Traktor Kontrol X1 MK1.
 
-import Live
-from _Framework.ControlSurface import ControlSurface
-from _Framework.TransportComponent import TransportComponent
-from _Framework.SessionRecordingComponent import SessionRecordingComponent
-from _Framework.ButtonElement import ButtonElement
-from _Framework.EncoderElement import EncoderElement
-from _Framework.InputControlElement import MIDI_CC_TYPE
-from _Framework.ControlSurfaceComponent import ControlSurfaceComponent
+Esta clase solo ensambla las piezas (composition root): cada seccion del
+controlador se configura en su propio metodo `_setup_*`, y la logica vive
+en los modulos del paquete.
+"""
 from _Framework.ClipCreator import ClipCreator
-from _Framework.ViewControlComponent import ViewControlComponent
+from _Framework.ControlSurface import ControlSurface
 from _Framework.DeviceComponent import DeviceComponent
 from _Framework.MixerComponent import MixerComponent
+from _Framework.SessionRecordingComponent import SessionRecordingComponent
+from _Framework.TransportComponent import TransportComponent
+from _Framework.ViewControlComponent import ViewControlComponent
 
-# Canal MIDI del X1 (Live cuenta desde 0: 1 = Canal 2 en el Controller Editor)
-CHANNEL = 1
-
-# Modo de los encoders: 1..63 = adelante, 65..127 = atras (Two's Complement en el Controller Editor)
-ENCODER_MAP_MODE = Live.MidiMap.MapMode.relative_smooth_two_compliment
-
-# Pon DEBUG_MIDI = True para escribir en Log.txt todo el MIDI que llega (los 16 canales)
-DEBUG_MIDI = False
-
-NavDirection = Live.Application.Application.View.NavDirection
-
-LED_ON = 127
-LED_OFF = 0
-
-# ---------------------------------------------------------------------------
-# Mapa de CC del template "Basic" del X1 MK1
-#
-#   Seccion        Izquierda        Derecha
-#   Encoder sup.   16               17
-#   FX1 / FX2      20 / 22          21 / 23
-#   Encoder inf.   26 (push 24)     27 (push 25)
-#   IN / OUT       28 / 30          29 / 31
-#   <BEAT / BEAT>  32 / 34          33 / 35
-#   CUE / CUP      36 / 38          37 / 39
-#   PLAY / SYNC    40 / 42          41 / 43
-# ---------------------------------------------------------------------------
-
-# Deck izquierdo: reproducir
-CC_PLAY = 40              # PLAY izq.   -> Play / Pausa
-CC_METRONOME = 42         # SYNC izq.   -> Metronomo
-CC_STOP = 36              # CUE izq.    -> Stop (2 veces = volver al inicio)
-CC_TAP_TEMPO = 38         # CUP izq.    -> Tap Tempo
-CC_SEEK_BACK = 32         # <BEAT izq.  -> Rebobinar (mantener)
-CC_SEEK_FWD = 34          # BEAT> izq.  -> Avanzar (mantener)
-CC_LOOP = 28              # IN izq.     -> Loop on/off
-CC_FOLLOW = 30            # OUT izq.    -> Follow (la vista sigue la reproduccion)
-
-# Deck derecho: grabar
-CC_ARR_RECORD = 41        # PLAY der.   -> Grabar en Arrangement
-CC_SESSION_RECORD = 43    # SYNC der.   -> Grabar en Session
-CC_AUTOMATION_ARM = 37    # CUE der.    -> Automation Arm
-CC_REENABLE_AUTO = 39     # CUP der.    -> Re-enable Automation
-CC_UNDO = 33              # <BEAT der.  -> Undo
-CC_REDO = 35              # BEAT> der.  -> Redo
-CC_CAPTURE_MIDI = 29      # IN der.     -> Capture MIDI
-CC_OVERDUB = 31           # OUT der.    -> Arrangement Overdub (MIDI +)
-
-# Botones FX: vistas
-CC_VIEW_BROWSER = 20      # FX1 izq.    -> Mostrar / ocultar Browser
-CC_VIEW_SESSION_ARR = 22  # FX2 izq.    -> Session <-> Arrangement
-CC_VIEW_CLIP = 21         # FX1 der.    -> Mostrar / ocultar vista Clip
-CC_VIEW_DEVICES = 23      # FX2 der.    -> Mostrar / ocultar vista Devices
-
-# Encoders inferiores: browser
-CC_BROWSER_VERTICAL = 26  # Giro izq.   -> Subir / bajar
-CC_BROWSER_LOAD = 24      # Push izq.   -> Cargar (o abrir carpeta)
-CC_BROWSER_FOLDER = 27    # Giro der.   -> Cerrar / abrir carpeta
-CC_BROWSER_PREVIEW = 25   # Push der.   -> Preescuchar
-
-# Encoders superiores: arrangement
-CC_ARR_ZOOM = 16          # Giro izq.   -> Zoom
-CC_ARR_SCROLL = 17        # Giro der.   -> Mover izquierda / derecha
-
-# Seccion superior: device seleccionado
-#   Perillas en orden de lectura (izq->der, arriba->abajo) = parametros 1..8
-CC_DEVICE_PARAMS = (0, 1, 2, 3, 4, 5, 6, 7)
-#   Botones ON y 1: columna izquierda = atras, columna derecha = adelante
-CC_DEVICE_ON_OFF = 8      # ON izq.     -> Encender / apagar device
-CC_TRACK_ARM = 9          # ON der.     -> Armar pista seleccionada
-CC_BANK_PREV = 10         # 1 izq.      -> Banco de parametros anterior
-CC_BANK_NEXT = 11         # 1 der.      -> Banco de parametros siguiente
-#   Botones 2 y 3: izquierda = devices, derecha = pistas (2 = anterior, 3 = siguiente)
-CC_DEVICE_PREV = 12       # 2 izq.      -> Device anterior
-CC_DEVICE_NEXT = 14       # 3 izq.      -> Device siguiente
-CC_TRACK_PREV = 13        # 2 der.      -> Pista anterior
-CC_TRACK_NEXT = 15        # 3 der.      -> Pista siguiente
-
-# Modo de las perillas (pagina Shift del template: SHIFT + boton ON)
-CC_KNOBS_MACROS = 52      # SHIFT + ON izq. -> Perillas = parametros/macros del device
-CC_KNOBS_SENDS = 53       # SHIFT + ON der. -> Perillas = sends A..H de la pista seleccionada
-
-# CC de todos los botones con LED en la pagina Basic (para el barrido de prueba)
-LED_CCS = tuple(range(8, 16)) + tuple(range(20, 24)) + tuple(range(28, 44))
-
-
-def relative_direction(value):
-    """Two's Complement: 1..63 = +1, 65..127 = -1, 0/64 = 0."""
-    if 0 < value < 64:
-        return 1
-    if value > 64:
-        return -1
-    return 0
-
-
-SEND_KEYS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'send_keys.vbs')
-
-
-def send_keys_to_live(keys, report=None):
-    """Envia teclas a la ventana de Live (solo Windows) con send_keys.vbs.
-    El VBS activa la ventana por el PID de Live, asi nunca escribe en otra aplicacion.
-    `keys` usa la sintaxis de WScript.Shell.SendKeys ('{ENTER}', '{RIGHT}' = flecha derecha)."""
-    if sys.platform != 'win32':
-        if report:
-            report('X1: cargar/preescuchar con el push solo esta soportado en Windows')
-        return
-    try:
-        subprocess.Popen(
-            ['wscript.exe', '//nologo', '//B', SEND_KEYS_SCRIPT, str(os.getpid()), keys],
-            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000),
-            close_fds=True)
-    except Exception as e:
-        if report:
-            report('X1: no se pudo enviar la tecla (%r)' % (e,))
-
-
-class BrowserNavigationComponent(ControlSurfaceComponent):
-    """Navega el browser con los encoders inferiores. Cualquier accion le da el foco al
-    browser, asi no hace falta hacer click en el para que respondan las perillas."""
-
-    def __init__(self, *a, **k):
-        super(BrowserNavigationComponent, self).__init__(*a, **k)
-        self._listeners = []
-
-    def set_controls(self, vertical_encoder, folder_encoder, load_button, preview_button):
-        self._listen(vertical_encoder, self._scroll_vertical)
-        self._listen(folder_encoder, self._scroll_folder)
-        self._listen(load_button, self._load)
-        self._listen(preview_button, self._preview)
-
-    def _listen(self, control, callback):
-        control.add_value_listener(callback)
-        self._listeners.append((control, callback))
-
-    def disconnect(self):
-        for control, callback in self._listeners:
-            if control.value_has_listener(callback):
-                control.remove_value_listener(callback)
-        self._listeners = []
-        super(BrowserNavigationComponent, self).disconnect()
-
-    def focus_browser(self):
-        app_view = self.application().view
-        if not app_view.is_view_visible('Browser'):
-            app_view.show_view('Browser')
-        app_view.focus_view('Browser')
-
-    def _scroll_vertical(self, value):
-        direction = relative_direction(value)
-        if self.is_enabled() and direction:
-            self.focus_browser()
-            self.application().view.scroll_view(
-                NavDirection.down if direction > 0 else NavDirection.up, 'Browser', False)
-
-    def _scroll_folder(self, value):
-        direction = relative_direction(value)
-        if self.is_enabled() and direction:
-            self.focus_browser()
-            self.application().view.scroll_view(
-                NavDirection.right if direction > 0 else NavDirection.left, 'Browser', False)
-
-    def _load(self, value):
-        if self.is_enabled() and value:
-            # La API de Live 12 no informa que esta seleccionado en el browser
-            # (BrowserItem.is_selected siempre es False), asi que hacemos lo mismo que a mano:
-            # foco en el browser + tecla Enter.
-            self.focus_browser()
-            send_keys_to_live('{ENTER}', self._report)
-
-    def _preview(self, value):
-        if self.is_enabled() and value:
-            self.focus_browser()
-            # Flecha derecha: en un archivo lo preescucha, en una carpeta la abre
-            send_keys_to_live('{RIGHT}', self._report)
-
-    def _report(self, message):
-        # Mensaje en la barra de estado de Live y en Log.txt
-        surface = self.canonical_parent
-        if surface is not None:
-            surface.show_message(message)
-            surface.log_message(message)
-
-
-class ArrangementNavigationComponent(ControlSurfaceComponent):
-    """Zoom y scroll horizontal del Arrangement con los encoders superiores."""
-
-    def __init__(self, *a, **k):
-        super(ArrangementNavigationComponent, self).__init__(*a, **k)
-        self._listeners = []
-
-    def set_controls(self, zoom_encoder, scroll_encoder):
-        for control, callback in ((zoom_encoder, self._zoom), (scroll_encoder, self._scroll)):
-            control.add_value_listener(callback)
-            self._listeners.append((control, callback))
-
-    def disconnect(self):
-        for control, callback in self._listeners:
-            if control.value_has_listener(callback):
-                control.remove_value_listener(callback)
-        self._listeners = []
-        super(ArrangementNavigationComponent, self).disconnect()
-
-    def _focus_arranger(self):
-        app_view = self.application().view
-        if not app_view.is_view_visible('Arranger'):
-            app_view.show_view('Arranger')
-        app_view.focus_view('Arranger')
-
-    def _zoom(self, value):
-        direction = relative_direction(value)
-        if self.is_enabled() and direction:
-            self._focus_arranger()
-            # izquierda/derecha = zoom horizontal (tiempo, todo el arrangement);
-            # arriba/abajo seria el alto de la pista seleccionada
-            self.application().view.zoom_view(
-                NavDirection.right if direction > 0 else NavDirection.left, 'Arranger', False)
-
-    def _scroll(self, value):
-        direction = relative_direction(value)
-        if self.is_enabled() and direction:
-            self._focus_arranger()
-            self.application().view.scroll_view(
-                NavDirection.right if direction > 0 else NavDirection.left, 'Arranger', False)
+from . import config, midi_debug, views
+from .actions import ActionButtons
+from .arrangement import ArrangementNavigationComponent
+from .browser import BrowserNavigationComponent
+from .config import (Arrangement, Browser, Device, KnobModes, Recording,
+                     Track, Transport, Views)
+from .elements import ElementFactory
+from .feedback import StateLeds
+from .knob_modes import KnobModeSelector, MacrosMode, SendsMode
+from .live_keys import create_key_sender
+from .selection import SelectionNavigator
+from .song_actions import SongActions
 
 
 class TraktorKontrolX1(ControlSurface):
 
+    _state_leds = None  # update_display puede llegar antes de __init__
+
     def __init__(self, c_instance):
-        super(TraktorKontrolX1, self).__init__(c_instance)
-        self._action_listeners = []
-        self._state_leds = []
+        super().__init__(c_instance)
+        self._elements = ElementFactory(config.CHANNEL)
+        self._state_leds = StateLeds()
+        self._actions = ActionButtons(self._elements, self._state_leds)
+        self._song_actions = SongActions(self.song)
+        self._selection = SelectionNavigator(
+            self.song, self.application, self.show_message)
         with self.component_guard():
             self._setup_transport()
             self._setup_recording()
-            self._setup_actions()
             self._setup_browser()
+            self._setup_views()
             self._setup_arrangement()
             self._setup_device()
-        self._led_sweep()
-
-    # --- Elementos -----------------------------------------------------------
-
-    def _button(self, cc):
-        return ButtonElement(True, MIDI_CC_TYPE, CHANNEL, cc)
-
-    def _encoder(self, cc):
-        return EncoderElement(MIDI_CC_TYPE, CHANNEL, cc, ENCODER_MAP_MODE)
-
-    def _action_button(self, cc, action, state=None):
-        """Boton que ejecuta `action()` al presionarse.
-        LED: si se pasa `state` (funcion -> bool), el LED muestra ese estado;
-        si no, el LED se enciende mientras el boton esta presionado."""
-        button = self._button(cc)
-
-        def listener(value):
-            if value:
-                action()
-            if state is None:
-                button.send_value(LED_ON if value else LED_OFF, force=True)
-            else:
-                self._refresh_state_leds()
-
-        button.add_value_listener(listener)
-        self._action_listeners.append((button, listener))
-        if state is not None:
-            self._state_leds.append((button, state))
+            self._setup_knob_modes()
+            self._setup_track()
+        self._start_led_sweep()
 
     # --- Deck izquierdo: reproducir ------------------------------------------
 
     def _setup_transport(self):
-        # play_toggle_model_transform identidad -> PLAY alterna entre Play y Pausa
+        button = self._elements.button
+        # Modelo identidad: PLAY alterna entre Play y Pausa
         self._transport = TransportComponent(
             play_toggle_model_transform=lambda value: value, name='Transport')
-        self._transport.set_play_button(self._button(CC_PLAY))
-        self._transport.set_stop_button(self._button(CC_STOP))
-        self._transport.set_metronome_button(self._button(CC_METRONOME))
-        self._transport.set_tap_tempo_button(self._button(CC_TAP_TEMPO))
-        self._transport.set_seek_buttons(self._button(CC_SEEK_FWD), self._button(CC_SEEK_BACK))
-        self._transport.set_loop_button(self._button(CC_LOOP))
-        self._action_button(CC_FOLLOW, self._toggle_follow,
-                            state=lambda: self.song().view.follow_song)
+        self._transport.set_play_button(button(Transport.PLAY))
+        self._transport.set_stop_button(button(Transport.STOP))
+        self._transport.set_metronome_button(button(Transport.METRONOME))
+        self._transport.set_tap_tempo_button(button(Transport.TAP_TEMPO))
+        self._transport.set_seek_buttons(
+            button(Transport.SEEK_FWD), button(Transport.SEEK_BACK))
+        self._transport.set_loop_button(button(Transport.LOOP))
+        self._actions.bind(Transport.FOLLOW, self._song_actions.toggle_follow,
+                           state=self._song_actions.is_following)
 
     # --- Deck derecho: grabar ------------------------------------------------
 
     def _setup_recording(self):
-        # SessionRecordingComponent necesita un ClipCreator y un ViewControlComponent;
-        # sin ellos falla en __init__ y Live descarta el script entero.
-        self._session_recording = SessionRecordingComponent(
+        button = self._elements.button
+        # Necesita ClipCreator y ViewControlComponent: sin ellos falla en
+        # __init__ y Live descarta el script entero.
+        recording = SessionRecordingComponent(
             ClipCreator(), ViewControlComponent(), name='Session_Recording')
-        self._transport.set_record_button(self._button(CC_ARR_RECORD))
-        self._transport.set_session_record_button(self._button(CC_SESSION_RECORD))
-        self._transport.set_arrangement_overdub_button(self._button(CC_OVERDUB))
-        self._session_recording.set_automation_button(self._button(CC_AUTOMATION_ARM))
-        self._session_recording.set_re_enable_automation_button(self._button(CC_REENABLE_AUTO))
-        self._action_button(CC_UNDO, self._undo)
-        self._action_button(CC_REDO, self._redo)
-        self._action_button(CC_CAPTURE_MIDI, self._capture_midi,
-                            state=lambda: self.song().can_capture_midi)
+        recording.set_automation_button(button(Recording.AUTOMATION_ARM))
+        recording.set_re_enable_automation_button(
+            button(Recording.REENABLE_AUTO))
+        self._transport.set_record_button(button(Recording.ARRANGEMENT))
+        self._transport.set_session_record_button(button(Recording.SESSION))
+        self._transport.set_arrangement_overdub_button(
+            button(Recording.OVERDUB))
+        self._actions.bind(Recording.UNDO, self._song_actions.undo)
+        self._actions.bind(Recording.REDO, self._song_actions.redo)
+        self._actions.bind(Recording.CAPTURE_MIDI,
+                           self._song_actions.capture_midi,
+                           state=self._song_actions.can_capture_midi)
+
+    # --- Encoders inferiores: browser ----------------------------------------
+
+    def _setup_browser(self):
+        self._browser = BrowserNavigationComponent(
+            create_key_sender(self._report), name='Browser_Navigation')
+        self._browser.set_controls(
+            self._elements.encoder(Browser.SCROLL),
+            self._elements.encoder(Browser.FOLDER),
+            self._elements.button(Browser.LOAD),
+            self._elements.button(Browser.PREVIEW))
 
     # --- Botones FX: vistas --------------------------------------------------
 
-    def _setup_actions(self):
-        self._action_button(CC_VIEW_BROWSER, self._toggle_browser,
-                            state=lambda: self._view_visible('Browser'))
-        self._action_button(CC_VIEW_SESSION_ARR, self._toggle_session_arrangement,
-                            state=lambda: self._view_visible('Arranger'))
-        self._action_button(CC_VIEW_CLIP, lambda: self._toggle_view('Detail/Clip'),
-                            state=lambda: self._view_visible('Detail/Clip'))
-        self._action_button(CC_VIEW_DEVICES, lambda: self._toggle_view('Detail/DeviceChain'),
-                            state=lambda: self._view_visible('Detail/DeviceChain'))
-
-    # --- Encoders ------------------------------------------------------------
-
-    def _setup_browser(self):
-        self._browser = BrowserNavigationComponent(name='Browser_Navigation')
-        self._browser.set_controls(
-            self._encoder(CC_BROWSER_VERTICAL),
-            self._encoder(CC_BROWSER_FOLDER),
-            self._button(CC_BROWSER_LOAD),
-            self._button(CC_BROWSER_PREVIEW))
-
-    def _setup_arrangement(self):
-        self._arrangement = ArrangementNavigationComponent(name='Arrangement_Navigation')
-        self._arrangement.set_controls(self._encoder(CC_ARR_ZOOM), self._encoder(CC_ARR_SCROLL))
-
-    # --- Seccion superior: device seleccionado ------------------------------
-
-    def _setup_device(self):
-        # El DeviceComponent sigue al device seleccionado (la "mano azul" de Live)
-        self._device = DeviceComponent(
-            device_selection_follows_track_selection=True, name='Device')
-        self._knobs = tuple(
-            EncoderElement(MIDI_CC_TYPE, CHANNEL, cc, Live.MidiMap.MapMode.absolute)
-            for cc in CC_DEVICE_PARAMS)
-        # El canal "seleccionado" del mixer sigue a la pista seleccionada en Live
-        self._mixer = MixerComponent(name='Mixer')
-        self._knob_mode = None
-        self._set_knob_mode('macros', announce=False)
-        self._action_button(CC_KNOBS_MACROS, lambda: self._set_knob_mode('macros'),
-                            state=lambda: self._knob_mode == 'macros')
-        self._action_button(CC_KNOBS_SENDS, lambda: self._set_knob_mode('sends'),
-                            state=lambda: self._knob_mode == 'sends')
-        self._device.set_on_off_button(self._button(CC_DEVICE_ON_OFF))
-        self._device.set_bank_nav_buttons(self._button(CC_BANK_PREV), self._button(CC_BANK_NEXT))
-        self.set_device_component(self._device)
-        self._action_button(CC_TRACK_ARM, self._toggle_arm,
-                            state=lambda: self._selected_track_armed())
-        self._action_button(CC_DEVICE_PREV, lambda: self._select_device(-1))
-        self._action_button(CC_DEVICE_NEXT, lambda: self._select_device(1))
-        self._action_button(CC_TRACK_PREV, lambda: self._select_track(-1))
-        self._action_button(CC_TRACK_NEXT, lambda: self._select_track(1))
-
-    def _set_knob_mode(self, mode, announce=True):
-        if mode == self._knob_mode:
-            return
-        self._knob_mode = mode
-        strip = self._mixer.selected_strip()
-        if mode == 'sends':
-            self._device.set_parameter_controls(None)
-            strip.set_send_controls(self._knobs)
-        else:
-            strip.set_send_controls(None)
-            self._device.set_parameter_controls(self._knobs)
-        if announce:
-            self.show_message('X1 Perillas: ' + (
-                'Sends A-H de la pista seleccionada' if mode == 'sends' else 'Macros / parametros del device'))
-
-    def _selected_track_armed(self):
-        track = self.song().view.selected_track
-        return track.can_be_armed and track.arm
-
-    def _toggle_arm(self):
-        track = self.song().view.selected_track
-        if track.can_be_armed:
-            track.arm = not track.arm
-
-    def _select_device(self, direction):
-        song = self.song()
-        track = song.view.selected_track
-        devices = list(track.devices)
-        if not devices:
-            self.show_message('X1: la pista "%s" no tiene devices' % track.name)
-            return
-        current = track.view.selected_device
-        index = next((i for i, d in enumerate(devices) if d == current), -1)
-        if index < 0:
-            index = 0 if direction > 0 else len(devices) - 1
-        else:
-            index = max(0, min(len(devices) - 1, index + direction))
-        device = devices[index]
-        song.view.select_device(device)
-        self.application().view.show_view('Detail/DeviceChain')
-        self.show_message('X1 Device: %s (%d/%d)' % (device.name, index + 1, len(devices)))
-
-    def _select_track(self, direction):
-        song = self.song()
-        tracks = list(song.visible_tracks) + list(song.return_tracks) + [song.master_track]
-        current = song.view.selected_track
-        index = next((i for i, t in enumerate(tracks) if t == current), 0)
-        song.view.selected_track = tracks[max(0, min(len(tracks) - 1, index + direction))]
-
-    # --- Acciones ------------------------------------------------------------
-
-    def _toggle_follow(self):
-        self.song().view.follow_song = not self.song().view.follow_song
-
-    def _undo(self):
-        if self.song().can_undo:
-            self.song().undo()
-
-    def _redo(self):
-        if self.song().can_redo:
-            self.song().redo()
-
-    def _capture_midi(self):
-        if self.song().can_capture_midi:
-            self.song().capture_midi()
-
-    def _toggle_browser(self):
-        app_view = self.application().view
-        if app_view.is_view_visible('Browser'):
-            app_view.hide_view('Browser')
-        else:
-            self._browser.focus_browser()
+    def _setup_views(self):
+        self._actions.bind(Views.BROWSER, self._browser.toggle,
+                           state=self._view_state(views.BROWSER))
+        self._actions.bind(Views.SESSION_ARRANGEMENT,
+                           self._toggle_session_arrangement,
+                           state=self._view_state(views.ARRANGER))
+        for cc, view_name in ((Views.CLIP, views.CLIP),
+                              (Views.DEVICES, views.DEVICES)):
+            self._actions.bind(cc, self._view_toggler(view_name),
+                               state=self._view_state(view_name))
 
     def _toggle_session_arrangement(self):
-        app_view = self.application().view
-        app_view.show_view('Arranger' if app_view.is_view_visible('Session') else 'Session')
+        views.toggle_session_arrangement(self.application().view)
 
-    def _toggle_view(self, view_name):
-        # En Live 12 Clip y Devices se muestran a la vez: cada boton es un interruptor propio
-        app_view = self.application().view
-        if app_view.is_view_visible(view_name):
-            app_view.hide_view(view_name)
-        else:
-            app_view.show_view(view_name)
+    def _view_toggler(self, view_name):
+        return lambda: views.toggle(self.application().view, view_name)
+
+    def _view_state(self, view_name):
+        return lambda: views.is_visible(self.application().view, view_name)
+
+    # --- Encoders superiores: arrangement ------------------------------------
+
+    def _setup_arrangement(self):
+        self._arrangement = ArrangementNavigationComponent(
+            name='Arrangement_Navigation')
+        self._arrangement.set_controls(
+            self._elements.encoder(Arrangement.ZOOM),
+            self._elements.encoder(Arrangement.SCROLL))
+
+    # --- Seccion superior izquierda: device ----------------------------------
+
+    def _setup_device(self):
+        button = self._elements.button
+        # Sigue al device seleccionado (la "mano azul" de Live)
+        self._device = DeviceComponent(
+            device_selection_follows_track_selection=True, name='Device')
+        self._device.set_on_off_button(button(Device.ON_OFF))
+        self._device.set_bank_nav_buttons(
+            button(Device.BANK_PREV), button(Device.BANK_NEXT))
+        self.set_device_component(self._device)
+        self._actions.bind(Device.PREV,
+                           lambda: self._selection.step_device(-1))
+        self._actions.bind(Device.NEXT,
+                           lambda: self._selection.step_device(1))
+
+    # --- Perillas: macros / sends --------------------------------------------
+
+    def _setup_knob_modes(self):
+        knobs = tuple(self._elements.knob(cc) for cc in Device.KNOBS)
+        modes = {
+            KnobModes.MACROS: MacrosMode(self._device),
+            KnobModes.SENDS: SendsMode(MixerComponent(name='Mixer')),
+        }
+        self._knob_modes = KnobModeSelector(knobs, modes, self.show_message)
+        self._knob_modes.select(KnobModes.MACROS, announce=False)
+        for cc in modes:
+            self._actions.bind(cc, self._knob_mode_selector(cc),
+                               state=self._knob_mode_state(cc))
+
+    def _knob_mode_selector(self, key):
+        return lambda: self._knob_modes.select(key)
+
+    def _knob_mode_state(self, key):
+        return lambda: self._knob_modes.is_active(key)
+
+    # --- Seccion superior derecha: pista -------------------------------------
+
+    def _setup_track(self):
+        self._actions.bind(Track.ARM, self._song_actions.toggle_arm,
+                           state=self._song_actions.is_selected_track_armed)
+        self._actions.bind(Track.PREV, lambda: self._selection.step_track(-1))
+        self._actions.bind(Track.NEXT, lambda: self._selection.step_track(1))
 
     # --- LEDs ----------------------------------------------------------------
 
-    def _view_visible(self, view_name):
-        return self.application().view.is_view_visible(view_name)
-
-    def _refresh_state_leds(self):
-        for button, state in self._state_leds:
-            try:
-                is_on = bool(state())
-            except Exception:
-                is_on = False
-            button.send_value(LED_ON if is_on else LED_OFF)
-
     def update_display(self):
-        # Live llama a update_display ~10 veces por segundo: mantiene los LEDs de estado
-        # al dia aunque el cambio se haga con el mouse (send_value no repite valores iguales)
-        super(TraktorKontrolX1, self).update_display()
-        if getattr(self, '_state_leds', None) and not self._sweeping:
+        # Live la llama ~10 veces por segundo: mantiene los LEDs de estado al
+        # dia aunque el cambio se haga con el mouse
+        super().update_display()
+        if self._state_leds is not None:
             with self.component_guard():
-                self._refresh_state_leds()
+                self._state_leds.refresh()
 
-    _sweeping = False
-
-    def _led_sweep(self):
-        """Al arrancar enciende todos los LEDs medio segundo: prueba visual de que el X1
-        recibe el feedback. Despues restaura el estado real de cada boton."""
-        self._sweeping = True
-        for cc in LED_CCS:
-            self._send_midi((0xB0 | CHANNEL, cc, LED_ON))
-        self.schedule_message(5, self._end_led_sweep)
+    def _start_led_sweep(self):
+        """Enciende todos los LEDs ~0.5 s: prueba visual de que el X1 recibe
+        el feedback. Luego se restaura el estado real de cada boton."""
+        self._state_leds.paused = True
+        self._send_to_all_leds(config.LED_ON)
+        self.schedule_message(config.LED_SWEEP_TICKS, self._end_led_sweep)
 
     def _end_led_sweep(self):
-        for cc in LED_CCS:
-            self._send_midi((0xB0 | CHANNEL, cc, LED_OFF))
-        self._sweeping = False
+        self._send_to_all_leds(config.LED_OFF)
+        self._state_leds.paused = False
         self.refresh_state()
-        self._refresh_state_leds()
+        self._state_leds.refresh()
 
-    # --- Debug ---------------------------------------------------------------
+    def _send_to_all_leds(self, value):
+        status = 0xB0 | config.CHANNEL
+        for cc in config.LED_CCS:
+            self._send_midi((status, cc, value))
+
+    # --- Mensajes y depuracion -----------------------------------------------
+
+    def _report(self, message):
+        """Barra de estado de Live + Log.txt."""
+        self.show_message(message)
+        self.log_message(message)
 
     def build_midi_map(self, midi_map_handle):
-        super(TraktorKontrolX1, self).build_midi_map(midi_map_handle)
-        if DEBUG_MIDI:
-            # Escuchar TODOS los CC y notas en los 16 canales para ver que envia el X1
-            handle = self._c_instance.handle()
-            for channel in range(16):
-                for number in range(128):
-                    if (0xB0 | channel, number) not in self._forwarding_registry:
-                        Live.MidiMap.forward_midi_cc(handle, midi_map_handle, channel, number)
-                    Live.MidiMap.forward_midi_note(handle, midi_map_handle, channel, number)
-            self.log_message('DEBUG: escuchando todos los CC/notas en los 16 canales')
+        super().build_midi_map(midi_map_handle)
+        if config.DEBUG_MIDI:
+            midi_debug.forward_everything(
+                self._c_instance.handle(), midi_map_handle,
+                self._forwarding_registry)
+            self.log_message('DEBUG: escuchando todo el MIDI (16 canales)')
 
     def receive_midi(self, midi_bytes):
-        if DEBUG_MIDI:
-            status = midi_bytes[0]
-            self.log_message('MIDI IN: status=%d (canal %d) cc/nota=%d valor=%d' % (
-                status & 0xF0, (status & 0x0F) + 1, midi_bytes[1], midi_bytes[2]))
-        super(TraktorKontrolX1, self).receive_midi(midi_bytes)
+        if config.DEBUG_MIDI:
+            self.log_message(midi_debug.describe(midi_bytes))
+        super().receive_midi(midi_bytes)
 
     def disconnect(self):
-        for button, listener in self._action_listeners:
-            if button.value_has_listener(listener):
-                button.remove_value_listener(listener)
-        self._action_listeners = []
-        super(TraktorKontrolX1, self).disconnect()
+        self._actions.disconnect()
+        super().disconnect()
