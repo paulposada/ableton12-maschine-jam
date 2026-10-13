@@ -103,7 +103,7 @@ SEND_KEYS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sen
 def send_keys_to_live(keys, report=None):
     """Envia teclas a la ventana de Live (solo Windows) con send_keys.vbs.
     El VBS activa la ventana por el PID de Live, asi nunca escribe en otra aplicacion.
-    `keys` usa la sintaxis de WScript.Shell.SendKeys ('{ENTER}', '+{ENTER}' = Shift+Enter)."""
+    `keys` usa la sintaxis de WScript.Shell.SendKeys ('{ENTER}', '{RIGHT}' = flecha derecha)."""
     if sys.platform != 'win32':
         if report:
             report('X1: cargar/preescuchar con el push solo esta soportado en Windows')
@@ -174,7 +174,8 @@ class BrowserNavigationComponent(ControlSurfaceComponent):
     def _preview(self, value):
         if self.is_enabled() and value:
             self.focus_browser()
-            send_keys_to_live('+{ENTER}', self._report)  # Shift+Enter = preescuchar
+            # Flecha derecha: en un archivo lo preescucha, en una carpeta la abre
+            send_keys_to_live('{RIGHT}', self._report)
 
     def _report(self, message):
         # Mensaje en la barra de estado de Live y en Log.txt
