@@ -119,6 +119,7 @@ class JamModes(CompoundComponent):
         self._pad_mode = PadMode(1)
         self._drum_pad_mode = DrumMode(1)
         self._step_mode = StepMode(2, self._pad_mode)
+        self._step_mode.set_mute_mode_source(lambda: self.in_track_mode(SEL_MODE_MUTE))
         self._user_mode = UserMode(4)
         self._drum_step_mode = DrumStepMode(3)
         self._drum_step_mode.set_mute_mode_source(lambda: self.in_track_mode(SEL_MODE_MUTE))

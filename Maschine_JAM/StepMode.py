@@ -3,7 +3,7 @@ from _Framework.SubjectSlot import subject_slot
 from _Framework.InputControlElement import MIDI_NOTE_ON_STATUS, MIDI_NOTE_OFF_STATUS
 
 GridQuantization = Live.Clip.GridQuantization
-from .MidiMap import COLOR_BLACK, quantize_settings, qauntize_is_triplet, quantize_base, quantize_clip_live, quantize_string, STEP_MODE, toHSB, BASE_NOTE_FIX_COLOR, from_midi_note, debug_out
+from .MidiMap import COLOR_BLACK, quantize_settings, qauntize_is_triplet, quantize_base, quantize_clip_live, quantize_string, STEP_MODE, toHSB, BASE_NOTE_FIX_COLOR, from_midi_note, debug_out, COLOR_WHITE_DIM, toggle_notes_mute
 
 from .MaschineMode import MaschineMode
 from .PadMode import PadMode
@@ -103,6 +103,9 @@ class GridElement:
                 return self._note_handler.bs_color
             self.__restore_color = COLOR_BLACK
             return
+        elif all(note[4] for note in self._notes):
+            self.__restore_color = COLOR_WHITE_DIM
+            return COLOR_WHITE_DIM
         elif self.is_base_note:
             self.__restore_color = self._note_handler.on_color
             return self._note_handler.on_color
@@ -141,6 +144,15 @@ class StepMode(MaschineMode):
         self._quantize_grid_max = 8
         self._page_handler = None
         self.__current_run_index = -1
+
+    _mute_mode_source = None
+
+    def set_mute_mode_source(self, source):
+        """`source()` -> True si el boton Mute de la JAM esta activo."""
+        self._mute_mode_source = source
+
+    def _is_mute_mode(self):
+        return bool(self._mute_mode_source and self._mute_mode_source())
 
     def set_mode_elements(self, modifier_component, encoder_handler):
         assert isinstance(modifier_component, ModifierComponent)
@@ -182,7 +194,10 @@ class StepMode(MaschineMode):
         else:
             ls = []
             noteval = self._padmode.get_scale.grid_row_to_note(row)
-            if grid.has_notes():
+            if self._is_mute_mode():
+                # Con Mute activo el paso activa / desactiva su nota
+                toggle_notes_mute(self._clip, noteval, 1, self._pos_scroll + self._quantize * col, self._quantize)
+            elif grid.has_notes():
                 self._clip.remove_notes_extended(noteval, 1, self._pos_scroll + self._quantize * col, self._quantize)
             else:
                 if self._mono_mode:

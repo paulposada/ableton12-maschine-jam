@@ -1,7 +1,7 @@
 import Live
 from _Framework.SubjectSlot import subject_slot
 from _Framework.InputControlElement import MIDI_NOTE_ON_STATUS, MIDI_NOTE_OFF_STATUS
-from .MidiMap import colorOnOff, quantize_settings, quantize_clip_live, qauntize_is_triplet, quantize_base, quantize_string, find_drum_device, PAD_MODE, CI_WHITE, COLOR_BLACK
+from .MidiMap import colorOnOff, quantize_settings, quantize_clip_live, qauntize_is_triplet, quantize_base, quantize_string, find_drum_device, PAD_MODE, CI_WHITE, COLOR_BLACK, COLOR_WHITE_DIM, toggle_notes_mute
 
 from .MaschineMode import MaschineMode
 from .ModifierComponent import ModifierComponent, VARIATION_BUTTON, CLEAR_ACTION, DUPLICATE_ACTION, MASK_CLEAR
@@ -233,7 +233,10 @@ class DrumStepMode(MaschineMode):
             step = self.__step_pads[step_index]
             note = self.device.view.selected_drum_pad.note
             position = self._pos_scroll + self._quantize * index
-            if step.note:
+            if self._is_mute_mode():
+                # Con Mute activo el paso activa / desactiva su nota
+                toggle_notes_mute(self._clip, note, 1, position, self._quantize)
+            elif step.note:
                 self._clip.remove_notes_extended(note, 1, position, self._quantize)
             else:
                 note_specification = Live.Clip.MidiNoteSpecification(note,
@@ -243,6 +246,8 @@ class DrumStepMode(MaschineMode):
                 self._clip.add_new_notes([note_specification])
 
     def note_color(self, note):
+        if note.mute:
+            return COLOR_WHITE_DIM
         vel = note.velocity
         if vel < 51:
             return self.on_color - 2
@@ -414,6 +419,9 @@ class DrumStepMode(MaschineMode):
         # cualquier camino (Mute, Solo, Arm...)
         if self._active and self._read_mute_mode():
             self.reassign_drum_pads()
+
+    def _is_mute_mode(self):
+        return bool(self.__mute_mode_source and self.__mute_mode_source())
 
     def _read_mute_mode(self):
         """Actualiza el estado del modo Mute; True si cambio."""

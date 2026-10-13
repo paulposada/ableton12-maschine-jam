@@ -312,6 +312,20 @@ def __find_drum_rack(chainlist):
     return None
 
 
+def toggle_notes_mute(clip, pitch, pitch_span, start, length):
+    """Activa / desactiva (mute) las notas del area, como "Deactivate Note"
+    de Live. Si alguna esta activa, las desactiva todas; si no, las activa.
+    Devuelve False si no habia notas."""
+    notes = clip.get_notes_extended(pitch, pitch_span, start, length)
+    if not notes:
+        return False
+    mute = not all(note.mute for note in notes)
+    for note in notes:
+        note.mute = mute
+    clip.apply_note_modifications(notes)
+    return True
+
+
 def find_drum_device(track):
     devices = track.devices
     for device in devices:
