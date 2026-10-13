@@ -26,6 +26,9 @@ DEBUG_MIDI = False
 
 NavDirection = Live.Application.Application.View.NavDirection
 
+LED_ON = 127
+LED_OFF = 0
+
 # ---------------------------------------------------------------------------
 # Mapa de CC del template "Basic" del X1 MK1
 #
@@ -92,6 +95,9 @@ CC_TRACK_NEXT = 15        # 3 der.      -> Pista siguiente
 # Modo de las perillas (pagina Shift del template: SHIFT + boton ON)
 CC_KNOBS_MACROS = 52      # SHIFT + ON izq. -> Perillas = parametros/macros del device
 CC_KNOBS_SENDS = 53       # SHIFT + ON der. -> Perillas = sends A..H de la pista seleccionada
+
+# CC de todos los botones con LED en la pagina Basic (para el barrido de prueba)
+LED_CCS = tuple(range(8, 16)) + tuple(range(20, 24)) + tuple(range(28, 44))
 
 
 def relative_direction(value):
@@ -238,6 +244,7 @@ class TraktorKontrolX1(ControlSurface):
     def __init__(self, c_instance):
         super(TraktorKontrolX1, self).__init__(c_instance)
         self._action_listeners = []
+        self._state_leds = []
         with self.component_guard():
             self._setup_transport()
             self._setup_recording()
@@ -245,6 +252,7 @@ class TraktorKontrolX1(ControlSurface):
             self._setup_browser()
             self._setup_arrangement()
             self._setup_device()
+        self._led_sweep()
 
     # --- Elementos -----------------------------------------------------------
 
@@ -254,16 +262,24 @@ class TraktorKontrolX1(ControlSurface):
     def _encoder(self, cc):
         return EncoderElement(MIDI_CC_TYPE, CHANNEL, cc, ENCODER_MAP_MODE)
 
-    def _action_button(self, cc, action):
-        """Boton que ejecuta `action()` al presionarse."""
+    def _action_button(self, cc, action, state=None):
+        """Boton que ejecuta `action()` al presionarse.
+        LED: si se pasa `state` (funcion -> bool), el LED muestra ese estado;
+        si no, el LED se enciende mientras el boton esta presionado."""
         button = self._button(cc)
 
         def listener(value):
             if value:
                 action()
+            if state is None:
+                button.send_value(LED_ON if value else LED_OFF, force=True)
+            else:
+                self._refresh_state_leds()
 
         button.add_value_listener(listener)
         self._action_listeners.append((button, listener))
+        if state is not None:
+            self._state_leds.append((button, state))
 
     # --- Deck izquierdo: reproducir ------------------------------------------
 
@@ -277,7 +293,8 @@ class TraktorKontrolX1(ControlSurface):
         self._transport.set_tap_tempo_button(self._button(CC_TAP_TEMPO))
         self._transport.set_seek_buttons(self._button(CC_SEEK_FWD), self._button(CC_SEEK_BACK))
         self._transport.set_loop_button(self._button(CC_LOOP))
-        self._action_button(CC_FOLLOW, self._toggle_follow)
+        self._action_button(CC_FOLLOW, self._toggle_follow,
+                            state=lambda: self.song().view.follow_song)
 
     # --- Deck derecho: grabar ------------------------------------------------
 
@@ -293,15 +310,20 @@ class TraktorKontrolX1(ControlSurface):
         self._session_recording.set_re_enable_automation_button(self._button(CC_REENABLE_AUTO))
         self._action_button(CC_UNDO, self._undo)
         self._action_button(CC_REDO, self._redo)
-        self._action_button(CC_CAPTURE_MIDI, self._capture_midi)
+        self._action_button(CC_CAPTURE_MIDI, self._capture_midi,
+                            state=lambda: self.song().can_capture_midi)
 
     # --- Botones FX: vistas --------------------------------------------------
 
     def _setup_actions(self):
-        self._action_button(CC_VIEW_BROWSER, self._toggle_browser)
-        self._action_button(CC_VIEW_SESSION_ARR, self._toggle_session_arrangement)
-        self._action_button(CC_VIEW_CLIP, lambda: self._toggle_view('Detail/Clip'))
-        self._action_button(CC_VIEW_DEVICES, lambda: self._toggle_view('Detail/DeviceChain'))
+        self._action_button(CC_VIEW_BROWSER, self._toggle_browser,
+                            state=lambda: self._view_visible('Browser'))
+        self._action_button(CC_VIEW_SESSION_ARR, self._toggle_session_arrangement,
+                            state=lambda: self._view_visible('Arranger'))
+        self._action_button(CC_VIEW_CLIP, lambda: self._toggle_view('Detail/Clip'),
+                            state=lambda: self._view_visible('Detail/Clip'))
+        self._action_button(CC_VIEW_DEVICES, lambda: self._toggle_view('Detail/DeviceChain'),
+                            state=lambda: self._view_visible('Detail/DeviceChain'))
 
     # --- Encoders ------------------------------------------------------------
 
@@ -330,12 +352,15 @@ class TraktorKontrolX1(ControlSurface):
         self._mixer = MixerComponent(name='Mixer')
         self._knob_mode = None
         self._set_knob_mode('macros', announce=False)
-        self._action_button(CC_KNOBS_MACROS, lambda: self._set_knob_mode('macros'))
-        self._action_button(CC_KNOBS_SENDS, lambda: self._set_knob_mode('sends'))
+        self._action_button(CC_KNOBS_MACROS, lambda: self._set_knob_mode('macros'),
+                            state=lambda: self._knob_mode == 'macros')
+        self._action_button(CC_KNOBS_SENDS, lambda: self._set_knob_mode('sends'),
+                            state=lambda: self._knob_mode == 'sends')
         self._device.set_on_off_button(self._button(CC_DEVICE_ON_OFF))
         self._device.set_bank_nav_buttons(self._button(CC_BANK_PREV), self._button(CC_BANK_NEXT))
         self.set_device_component(self._device)
-        self._action_button(CC_TRACK_ARM, self._toggle_arm)
+        self._action_button(CC_TRACK_ARM, self._toggle_arm,
+                            state=lambda: self._selected_track_armed())
         self._action_button(CC_DEVICE_PREV, lambda: self._select_device(-1))
         self._action_button(CC_DEVICE_NEXT, lambda: self._select_device(1))
         self._action_button(CC_TRACK_PREV, lambda: self._select_track(-1))
@@ -355,6 +380,10 @@ class TraktorKontrolX1(ControlSurface):
         if announce:
             self.show_message('X1 Perillas: ' + (
                 'Sends A-H de la pista seleccionada' if mode == 'sends' else 'Macros / parametros del device'))
+
+    def _selected_track_armed(self):
+        track = self.song().view.selected_track
+        return track.can_be_armed and track.arm
 
     def _toggle_arm(self):
         track = self.song().view.selected_track
@@ -421,6 +450,44 @@ class TraktorKontrolX1(ControlSurface):
             app_view.hide_view(view_name)
         else:
             app_view.show_view(view_name)
+
+    # --- LEDs ----------------------------------------------------------------
+
+    def _view_visible(self, view_name):
+        return self.application().view.is_view_visible(view_name)
+
+    def _refresh_state_leds(self):
+        for button, state in self._state_leds:
+            try:
+                is_on = bool(state())
+            except Exception:
+                is_on = False
+            button.send_value(LED_ON if is_on else LED_OFF)
+
+    def update_display(self):
+        # Live llama a update_display ~10 veces por segundo: mantiene los LEDs de estado
+        # al dia aunque el cambio se haga con el mouse (send_value no repite valores iguales)
+        super(TraktorKontrolX1, self).update_display()
+        if getattr(self, '_state_leds', None) and not self._sweeping:
+            with self.component_guard():
+                self._refresh_state_leds()
+
+    _sweeping = False
+
+    def _led_sweep(self):
+        """Al arrancar enciende todos los LEDs medio segundo: prueba visual de que el X1
+        recibe el feedback. Despues restaura el estado real de cada boton."""
+        self._sweeping = True
+        for cc in LED_CCS:
+            self._send_midi((0xB0 | CHANNEL, cc, LED_ON))
+        self.schedule_message(5, self._end_led_sweep)
+
+    def _end_led_sweep(self):
+        for cc in LED_CCS:
+            self._send_midi((0xB0 | CHANNEL, cc, LED_OFF))
+        self._sweeping = False
+        self.refresh_state()
+        self._refresh_state_leds()
 
     # --- Debug ---------------------------------------------------------------
 

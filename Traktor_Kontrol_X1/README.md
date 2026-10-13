@@ -109,6 +109,16 @@ Para cambiar una asignación, edita las constantes `CC_*` al inicio de `TraktorK
 
 ---
 
+### 7. LEDs
+Al cargar el script, **todos los LEDs se encienden medio segundo** (prueba de que el X1 recibe el feedback) y luego muestran el estado real:
+
+* **Estado de Live:** Play, Metrónomo, Loop, Rec, Session Rec, Overdub, Automation Arm/Re-enable, Device on/off, Follow, Arm de la pista, Capture MIDI (encendido si hay algo que capturar), vistas visibles (Browser, Arrangement, Clip, Devices) y modo de perillas (SHIFT + ON).
+* **Botones de acción** (Undo/Redo, navegación de devices/pistas, bancos, Tap): se encienden mientras los mantienes presionados.
+
+Requisitos en el Controller Editor: cada botón con **LED On: For MIDI In**, y en Ableton el **Output** del Control Surface en `Traktor Kontrol X1 - 2`.
+
+---
+
 ## 💡 ¿Por qué podría no estar funcionando?
 
 Si ya probaste el código y no hace nada, revisa este checklist:
