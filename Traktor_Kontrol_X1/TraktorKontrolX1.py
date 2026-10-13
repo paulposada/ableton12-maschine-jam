@@ -142,6 +142,7 @@ class BrowserNavigationComponent(ControlSurfaceComponent):
         if not (self.is_enabled() and value):
             return
         self.focus_browser()
+        self._diagnose()
         item = self.selected_item()
         browser = self.application().browser
         if item is None:
@@ -200,6 +201,36 @@ class BrowserNavigationComponent(ControlSurfaceComponent):
                 return item
             item = child
         return None
+
+    def _diagnose(self):
+        # TEMPORAL: averiguar que expone Live 12 para el browser
+        log = self.canonical_parent.log_message
+        import sys
+        log('DIAG builtins con ctypes: %s' % [m for m in sys.builtin_module_names if 'ctypes' in m])
+        try:
+            import _ctypes
+            log('DIAG _ctypes importado OK: %s' % _ctypes)
+        except Exception as e:
+            log('DIAG _ctypes NO disponible: %r' % e)
+        browser = self.application().browser
+        log('DIAG browser attrs: %s' % [a for a in dir(browser) if not a.startswith('_')])
+        for name in ('sounds', 'drums', 'instruments', 'audio_effects', 'midi_effects',
+                     'max_for_live', 'plugins', 'clips', 'samples', 'packs',
+                     'user_library', 'current_project', 'user_folders'):
+            try:
+                root = getattr(browser, name)
+                if hasattr(root, 'is_selected'):
+                    sel = [c.name for c in root.iter_children if c.is_selected]
+                    log('DIAG %s: is_selected=%s hijos_sel=%s' % (name, root.is_selected, sel))
+                else:
+                    log('DIAG %s: vector %s' % (name, [(i.name, i.is_selected) for i in root]))
+            except Exception as e:
+                log('DIAG %s: error %r' % (name, e))
+        try:
+            target = browser.hotswap_target
+            log('DIAG hotswap_target: %r' % (getattr(target, 'name', target),))
+        except Exception as e:
+            log('DIAG hotswap_target error %r' % e)
 
     @staticmethod
     def _first_selected(items):
