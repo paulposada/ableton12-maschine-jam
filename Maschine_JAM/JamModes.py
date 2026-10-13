@@ -173,9 +173,10 @@ class JamModes(CompoundComponent):
     def _light_button(self, which):
         self._pad_mode_button.set_display_value(which == 1 and 127 or 0, True)
         self._step_mode_button.set_display_value(which == 2 and 127 or 0, True)
-        self._solo_button.set_display_value(0, True)
-        self._mute_button.set_display_value(0, True)
-        self._grid_button.set_display_value(0, True)
+        # Antes se apagaban Solo/Mute/Grid aunque su modo siguiera activo:
+        # ahora el LED refleja el estado real al cambiar de modo
+        self._mute_button.set_display_value(self.in_track_mode(SEL_MODE_MUTE) and 127 or 0, True)
+        self.__encoder_control.update_mode()  # Solo y Grid
 
     @property
     def selected_mode(self):
