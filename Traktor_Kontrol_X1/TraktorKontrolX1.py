@@ -144,6 +144,11 @@ class BrowserNavigationComponent(ControlSurfaceComponent):
         self.focus_browser()
         item = self.selected_item()
         browser = self.application().browser
+        if item is None:
+            self._report('X1 Cargar: no encontre nada seleccionado en el browser')
+        else:
+            self._report('X1 Cargar: "%s" (cargable=%s, carpeta=%s)' % (
+                item.name, item.is_loadable, item.is_folder))
         if item is not None and item.is_loadable:
             browser.load_item(item)
         else:
@@ -155,7 +160,12 @@ class BrowserNavigationComponent(ControlSurfaceComponent):
             return
         self.focus_browser()
         item = self.selected_item()
-        if item is not None and not item.is_folder:
+        if item is None:
+            self._report('X1 Preescuchar: no encontre nada seleccionado en el browser')
+        elif item.is_folder:
+            self._report('X1 Preescuchar: "%s" es una carpeta' % item.name)
+        else:
+            self._report('X1 Preescuchar: "%s"' % item.name)
             self.application().browser.preview_item(item)
 
     def selected_item(self):
@@ -177,13 +187,33 @@ class BrowserNavigationComponent(ControlSurfaceComponent):
             else:
                 # packs / user_folders son un BrowserItemVector (lista de items)
                 roots.extend(root)
-        item = next((root for root in roots if root.is_selected), None)
+        item = self._first_selected(roots)
+        if item is None:
+            # Algunas categorias raiz no se marcan como seleccionadas: buscar un nivel abajo
+            for root in roots:
+                item = self._first_selected(root.iter_children)
+                if item is not None:
+                    break
         while item is not None:
-            child = next((c for c in item.iter_children if c.is_selected), None)
+            child = self._first_selected(item.iter_children)
             if child is None:
                 return item
             item = child
         return None
+
+    @staticmethod
+    def _first_selected(items):
+        for item in items:
+            if item.is_selected:
+                return item
+        return None
+
+    def _report(self, message):
+        # Mensaje en la barra de estado de Live y en Log.txt
+        surface = self.canonical_parent
+        if surface is not None:
+            surface.show_message(message)
+            surface.log_message(message)
 
 
 class ArrangementNavigationComponent(ControlSurfaceComponent):
