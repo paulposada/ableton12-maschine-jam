@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+
 import Live
 from _Framework.ControlSurface import ControlSurface
 from _Framework.TransportComponent import TransportComponent
@@ -93,6 +97,27 @@ def relative_direction(value):
     return 0
 
 
+SEND_KEYS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'send_keys.vbs')
+
+
+def send_keys_to_live(keys, report=None):
+    """Envia teclas a la ventana de Live (solo Windows) con send_keys.vbs.
+    El VBS activa la ventana por el PID de Live, asi nunca escribe en otra aplicacion.
+    `keys` usa la sintaxis de WScript.Shell.SendKeys ('{ENTER}', '+{ENTER}' = Shift+Enter)."""
+    if sys.platform != 'win32':
+        if report:
+            report('X1: cargar/preescuchar con el push solo esta soportado en Windows')
+        return
+    try:
+        subprocess.Popen(
+            ['wscript.exe', '//nologo', '//B', SEND_KEYS_SCRIPT, str(os.getpid()), keys],
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000),
+            close_fds=True)
+    except Exception as e:
+        if report:
+            report('X1: no se pudo enviar la tecla (%r)' % (e,))
+
+
 class BrowserNavigationComponent(ControlSurfaceComponent):
     """Navega el browser con los encoders inferiores. Cualquier accion le da el foco al
     browser, asi no hace falta hacer click en el para que respondan las perillas."""
@@ -139,105 +164,17 @@ class BrowserNavigationComponent(ControlSurfaceComponent):
                 NavDirection.right if direction > 0 else NavDirection.left, 'Browser', False)
 
     def _load(self, value):
-        if not (self.is_enabled() and value):
-            return
-        self.focus_browser()
-        self._diagnose()
-        item = self.selected_item()
-        browser = self.application().browser
-        if item is None:
-            self._report('X1 Cargar: no encontre nada seleccionado en el browser')
-        else:
-            self._report('X1 Cargar: "%s" (cargable=%s, carpeta=%s)' % (
-                item.name, item.is_loadable, item.is_folder))
-        if item is not None and item.is_loadable:
-            browser.load_item(item)
-        else:
-            # Carpeta (o nada seleccionado): abrirla, igual que la flecha derecha
-            self.application().view.scroll_view(NavDirection.right, 'Browser', False)
+        if self.is_enabled() and value:
+            # La API de Live 12 no informa que esta seleccionado en el browser
+            # (BrowserItem.is_selected siempre es False), asi que hacemos lo mismo que a mano:
+            # foco en el browser + tecla Enter.
+            self.focus_browser()
+            send_keys_to_live('{ENTER}', self._report)
 
     def _preview(self, value):
-        if not (self.is_enabled() and value):
-            return
-        self.focus_browser()
-        item = self.selected_item()
-        if item is None:
-            self._report('X1 Preescuchar: no encontre nada seleccionado en el browser')
-        elif item.is_folder:
-            self._report('X1 Preescuchar: "%s" es una carpeta' % item.name)
-        else:
-            self._report('X1 Preescuchar: "%s"' % item.name)
-            self.application().browser.preview_item(item)
-
-    def selected_item(self):
-        """Devuelve el BrowserItem seleccionado. BrowserItem.is_selected es True para la
-        seleccion y para todas sus carpetas padre, asi que basta con bajar por esa rama."""
-        browser = self.application().browser
-        roots = []
-        for name in ('sounds', 'drums', 'instruments', 'audio_effects', 'midi_effects',
-                     'max_for_live', 'plugins', 'clips', 'samples', 'packs',
-                     'user_library', 'current_project', 'user_folders'):
-            try:
-                root = getattr(browser, name)
-            except Exception:
-                continue
-            if root is None:
-                continue
-            if hasattr(root, 'is_selected'):
-                roots.append(root)
-            else:
-                # packs / user_folders son un BrowserItemVector (lista de items)
-                roots.extend(root)
-        item = self._first_selected(roots)
-        if item is None:
-            # Algunas categorias raiz no se marcan como seleccionadas: buscar un nivel abajo
-            for root in roots:
-                item = self._first_selected(root.iter_children)
-                if item is not None:
-                    break
-        while item is not None:
-            child = self._first_selected(item.iter_children)
-            if child is None:
-                return item
-            item = child
-        return None
-
-    def _diagnose(self):
-        # TEMPORAL: averiguar que expone Live 12 para el browser
-        log = self.canonical_parent.log_message
-        import sys
-        log('DIAG builtins con ctypes: %s' % [m for m in sys.builtin_module_names if 'ctypes' in m])
-        try:
-            import _ctypes
-            log('DIAG _ctypes importado OK: %s' % _ctypes)
-        except Exception as e:
-            log('DIAG _ctypes NO disponible: %r' % e)
-        browser = self.application().browser
-        log('DIAG browser attrs: %s' % [a for a in dir(browser) if not a.startswith('_')])
-        for name in ('sounds', 'drums', 'instruments', 'audio_effects', 'midi_effects',
-                     'max_for_live', 'plugins', 'clips', 'samples', 'packs',
-                     'user_library', 'current_project', 'user_folders'):
-            try:
-                root = getattr(browser, name)
-                if hasattr(root, 'is_selected'):
-                    sel = [c.name for c in root.iter_children if c.is_selected]
-                    log('DIAG %s: is_selected=%s hijos_sel=%s' % (name, root.is_selected, sel))
-                else:
-                    log('DIAG %s: vector %s' % (name, [(i.name, i.is_selected) for i in root]))
-            except Exception as e:
-                log('DIAG %s: error %r' % (name, e))
-        try:
-            target = browser.hotswap_target
-            log('DIAG hotswap_target: %r' % (getattr(target, 'name', target),))
-        except Exception as e:
-            log('DIAG hotswap_target error %r' % e)
-
-    @staticmethod
-    def _first_selected(items):
-        for item in items:
-            if item.is_selected:
-                return item
-        return None
+        if self.is_enabled() and value:
+            self.focus_browser()
+            send_keys_to_live('+{ENTER}', self._report)  # Shift+Enter = preescuchar
 
     def _report(self, message):
         # Mensaje en la barra de estado de Live y en Log.txt
