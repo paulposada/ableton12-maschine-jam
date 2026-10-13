@@ -1,7 +1,7 @@
 import Live
 from _Framework.SubjectSlot import subject_slot
 from _Framework.InputControlElement import MIDI_NOTE_ON_STATUS, MIDI_NOTE_OFF_STATUS
-from .MidiMap import colorOnOff, quantize_settings, quantize_clip_live, qauntize_is_triplet, quantize_base, quantize_string, find_drum_device, PAD_MODE, CI_WHITE
+from .MidiMap import colorOnOff, quantize_settings, quantize_clip_live, qauntize_is_triplet, quantize_base, quantize_string, find_drum_device, PAD_MODE, CI_WHITE, COLOR_BLACK
 
 from .MaschineMode import MaschineMode
 from .ModifierComponent import ModifierComponent, VARIATION_BUTTON, CLEAR_ACTION, DUPLICATE_ACTION, MASK_CLEAR
@@ -56,7 +56,7 @@ class VelocityPad:
         if button:
             self.__button = button
             self.__button.add_value_listener(self.handle_selection)
-        else:
+        elif self.__button:
             self.__button.remove_value_listener(self.handle_selection)
             self.__button = None
         return
@@ -85,7 +85,7 @@ class DrumStepPad:
         if button:
             self.__button = button
             self.__button.add_value_listener(self.handle_selection)
-        else:
+        elif self.__button:
             self.__button.remove_value_listener(self.handle_selection)
             self.__button = None
         return
@@ -117,6 +117,8 @@ class DrumStepMode(MaschineMode):
     __selected_velocity_index = 15
     __pad_selection_only = False
     __pad_select_direct = False
+    __mute_mode = False
+    __mute_mode_source = None
     _modifier_componenet = None
     _length_listener = None
     _page_handler = None
@@ -205,6 +207,8 @@ class DrumStepMode(MaschineMode):
         return (0, 0)
 
     def __pad_to_color(self, pad):
+        if pad and pad.mute:
+            return (COLOR_BLACK, COLOR_BLACK)
         if pad:
             chains = pad.chains
             name = pad.name
@@ -376,22 +380,49 @@ class DrumStepMode(MaschineMode):
     def hande_drum_pad_selection(self, index, value):
         if value and self.device:
             pad_idx = self.device.view.drum_pads_scroll_position * 4 + index
+            if self.__mute_mode:
+                self._toggle_drum_pad_mute(self.device.drum_pads[pad_idx])
+                return
             self.device.view.selected_drum_pad = self.device.drum_pads[pad_idx]
             modmode = self._modifier_componenet.modifier_mask()
             if modmode == MASK_CLEAR:
                 self._clip.remove_notes_extended(self.device.view.selected_drum_pad.note, 1, 0.0, self._clip.length)
 
+    def _pads_select_only(self):
+        # Con SHIFT o con el modo Mute activo los pads no tocan notas:
+        # sus pulsaciones llegan a hande_drum_pad_selection
+        return self.__pad_selection_only or self.__mute_mode
+
     def reassign_drum_pads(self):
         for pad in self._pads:
-            pad.set_notemode(not self.__pad_selection_only)
-            if not self.__pad_selection_only:
+            if pad.button is None:
+                continue
+            pad.set_notemode(not self._pads_select_only())
+            if not self._pads_select_only():
                 button = pad.button
                 self.canonical_parent._forwarding_registry[(MIDI_NOTE_ON_STATUS, button.get_identifier())] = button
                 self.canonical_parent._forwarding_registry[(MIDI_NOTE_OFF_STATUS, button.get_identifier())] = button
                 pad.assign_midi()
 
+    def set_mute_mode_source(self, source):
+        """`source()` -> True si el boton Mute de la JAM esta activo."""
+        self.__mute_mode_source = source
+
     def notify(self, blink_state):
-        pass
+        # Se llama periodicamente: sigue el modo Mute aunque cambie por
+        # cualquier camino (Mute, Solo, Arm...)
+        if self._active and self.__mute_mode_source:
+            mute_mode = bool(self.__mute_mode_source())
+            if mute_mode != self.__mute_mode:
+                self.__mute_mode = mute_mode
+                self.reassign_drum_pads()
+
+    def _toggle_drum_pad_mute(self, drum_pad):
+        drum_pad.mute = not drum_pad.mute
+        state = 'MUTE' if drum_pad.mute else 'UNMUTE'
+        self.canonical_parent.show_message(f'{state}: {drum_pad.name}')
+        self.assign_pads()
+        self.update_pads()
 
     def arm_to_clip(self):
         if self._clip:
@@ -423,10 +454,13 @@ class DrumStepMode(MaschineMode):
                         pad_index = (7 - row) * 4 + column - 4
                         note_index = (3 - (7 - row)) * 4 + column - 4
                         pad = self._pads[pad_index]
-                        pad.set_notemode(not self.__pad_selection_only)
+                        # El original solo asignaba el boton si la pista NO tenia
+                        # drum rack: sin esto SHIFT/Mute fallan ('NoneType')
+                        pad.set_button(button)
+                        pad.set_notemode(not self._pads_select_only())
                         pad.set_action_callback(self.hande_drum_pad_selection)
                         pad.set_note_index(note_index)
-                        if not self.__pad_selection_only:
+                        if not self._pads_select_only():
                             self.canonical_parent._forwarding_registry[
                              (MIDI_NOTE_ON_STATUS, button.get_identifier())] = button
                             self.canonical_parent._forwarding_registry[

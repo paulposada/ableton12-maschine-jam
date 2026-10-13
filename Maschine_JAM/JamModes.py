@@ -1,4 +1,4 @@
-from .MidiMap import PARM_RANGE, NAV_SRC_ENCODER, vindexof, arm_exclusive, find_drum_device
+from .MidiMap import PARM_RANGE, NAV_SRC_ENCODER, vindexof, arm_exclusive, find_drum_device, SEL_MODE_MUTE
 from .PadMode import PadMode
 from .DrumMode import DrumMode
 from .ModifierComponent import MASK_CLEAR, MASK_DUPLICATE, MASK_SELECT, MASK_SHIFT
@@ -121,6 +121,7 @@ class JamModes(CompoundComponent):
         self._step_mode = StepMode(2, self._pad_mode)
         self._user_mode = UserMode(4)
         self._drum_step_mode = DrumStepMode(3)
+        self._drum_step_mode.set_mute_mode_source(lambda: self.in_track_mode(SEL_MODE_MUTE))
         self._mode_group = MG_CLIP
         self._clip_mode.enter_action = self.enter_clip_mode
         self._pad_mode.enter_action = self.enter_pad_mode

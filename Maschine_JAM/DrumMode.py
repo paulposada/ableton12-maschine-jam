@@ -28,6 +28,8 @@ class DrumPad(object):
 
     def set_notemode(self, mode):
         self._notemode = mode
+        if self._button is None:
+            return
         if self._button:
             self._button.set_to_notemode(mode)
         if self.__has_val_listener:
