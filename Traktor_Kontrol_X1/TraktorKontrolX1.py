@@ -77,14 +77,15 @@ CC_ARR_SCROLL = 17        # Giro der.   -> Mover izquierda / derecha
 # Seccion superior: device seleccionado
 #   Perillas en orden de lectura (izq->der, arriba->abajo) = parametros 1..8
 CC_DEVICE_PARAMS = (0, 1, 2, 3, 4, 5, 6, 7)
-#   Botones: columna izquierda = atras, columna derecha = adelante
+#   Botones ON y 1: columna izquierda = atras, columna derecha = adelante
 CC_DEVICE_ON_OFF = 8      # ON izq.     -> Encender / apagar device
 CC_TRACK_ARM = 9          # ON der.     -> Armar pista seleccionada
 CC_BANK_PREV = 10         # 1 izq.      -> Banco de parametros anterior
 CC_BANK_NEXT = 11         # 1 der.      -> Banco de parametros siguiente
+#   Botones 2 y 3: izquierda = devices, derecha = pistas (2 = anterior, 3 = siguiente)
 CC_DEVICE_PREV = 12       # 2 izq.      -> Device anterior
-CC_DEVICE_NEXT = 13       # 2 der.      -> Device siguiente
-CC_TRACK_PREV = 14        # 3 izq.      -> Pista anterior
+CC_DEVICE_NEXT = 14       # 3 izq.      -> Device siguiente
+CC_TRACK_PREV = 13        # 2 der.      -> Pista anterior
 CC_TRACK_NEXT = 15        # 3 der.      -> Pista siguiente
 
 

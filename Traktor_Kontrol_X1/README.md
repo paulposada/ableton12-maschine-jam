@@ -86,15 +86,15 @@ Cualquier giro o push le da el foco al Browser (ya no hace falta hacer click en 
 | Giro der. | 17 | Mover izquierda / derecha |
 
 ### 6. Sección superior — Device seleccionado
-Las perillas controlan el device que tiene la "mano azul" (sigue a la pista y al device seleccionados). En los botones, la columna izquierda va **hacia atrás** y la derecha **hacia adelante**.
+Las perillas controlan el device que tiene la "mano azul" (sigue a la pista y al device seleccionados). En los botones ON y 1, la columna izquierda va **hacia atrás** y la derecha **hacia adelante**. Los botones 2 y 3 navegan: a la izquierda **devices**, a la derecha **pistas** (2 = anterior, 3 = siguiente).
 
 | Control | CC | Función |
 |---|---|---|
 | 8 perillas | 0–7 | Parámetros 1–8 del device (orden de lectura: izq→der, arriba→abajo) |
 | ON izq. / ON der. | 8 / 9 | Encender/apagar device / Armar pista seleccionada |
 | 1 izq. / 1 der. | 10 / 11 | Banco de parámetros anterior / siguiente |
-| 2 izq. / 2 der. | 12 / 13 | Device anterior / siguiente |
-| 3 izq. / 3 der. | 14 / 15 | Pista anterior / siguiente |
+| 2 izq. / 3 izq. | 12 / 14 | Device anterior / siguiente |
+| 2 der. / 3 der. | 13 / 15 | Pista anterior / siguiente |
 
 Para cambiar una asignación, edita las constantes `CC_*` al inicio de `TraktorKontrolX1.py`. Para depurar, pon `DEBUG_MIDI = True` y el script escribirá en `Log.txt` todo el MIDI que recibe.
 
