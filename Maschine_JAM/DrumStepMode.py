@@ -403,6 +403,7 @@ class DrumStepMode(MaschineMode):
                 self.canonical_parent._forwarding_registry[(MIDI_NOTE_ON_STATUS, button.get_identifier())] = button
                 self.canonical_parent._forwarding_registry[(MIDI_NOTE_OFF_STATUS, button.get_identifier())] = button
                 pad.assign_midi()
+            pad.send_color()
 
     def set_mute_mode_source(self, source):
         """`source()` -> True si el boton Mute de la JAM esta activo."""
@@ -411,11 +412,17 @@ class DrumStepMode(MaschineMode):
     def notify(self, blink_state):
         # Se llama periodicamente: sigue el modo Mute aunque cambie por
         # cualquier camino (Mute, Solo, Arm...)
-        if self._active and self.__mute_mode_source:
-            mute_mode = bool(self.__mute_mode_source())
-            if mute_mode != self.__mute_mode:
-                self.__mute_mode = mute_mode
-                self.reassign_drum_pads()
+        if self._active and self._read_mute_mode():
+            self.reassign_drum_pads()
+
+    def _read_mute_mode(self):
+        """Actualiza el estado del modo Mute; True si cambio."""
+        if not self.__mute_mode_source:
+            return False
+        mute_mode = bool(self.__mute_mode_source())
+        changed = mute_mode != self.__mute_mode
+        self.__mute_mode = mute_mode
+        return changed
 
     def _toggle_drum_pad_mute(self, drum_pad):
         drum_pad.mute = not drum_pad.mute
@@ -443,6 +450,7 @@ class DrumStepMode(MaschineMode):
         self.assign_track_device()
         self.assign_highlighted_clip_slot()
         __pad_selection_only = False
+        self._read_mute_mode()
         self._modifier_componenet.set_action_listener(self)
         self._modifier_componenet.set_edit_state(lock=False)
         matrix = self.canonical_parent._bmatrix
@@ -466,7 +474,9 @@ class DrumStepMode(MaschineMode):
                             self.canonical_parent._forwarding_registry[
                              (MIDI_NOTE_OFF_STATUS, button.get_identifier())] = button
                             pad.assign_midi()
-                            button.send_color_direct(pad.get_color())
+                        # Color siempre (antes solo en modo nota: con SHIFT/Mute
+                        # los pads quedaban apagados)
+                        button.send_color_direct(pad.get_color())
                     else:
                         vel_index = (7 - row) * 4 + column
                         self.__vel_pads[vel_index].assign_button(button)
