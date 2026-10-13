@@ -21,14 +21,6 @@ def focus(app_view, view_name):
     app_view.focus_view(view_name)
 
 
-def toggle(app_view, view_name):
-    """Muestra u oculta una vista sin tocar las demas."""
-    if app_view.is_view_visible(view_name):
-        app_view.hide_view(view_name)
-    else:
-        app_view.show_view(view_name)
-
-
 def toggle_session_arrangement(app_view):
     target = ARRANGER if app_view.is_view_visible(SESSION) else SESSION
     app_view.show_view(target)

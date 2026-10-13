@@ -11,6 +11,10 @@ import sys
 
 ENTER = '{ENTER}'
 RIGHT = '{RIGHT}'
+# Atajos de Live 12 (^ = Ctrl, % = Alt). Cada uno muestra / oculta su vista
+# sin afectar a la otra; la API solo permite ver una de las dos a la vez.
+TOGGLE_CLIP_VIEW = '^%3'     # Ctrl+Alt+3
+TOGGLE_DEVICE_VIEW = '^%4'   # Ctrl+Alt+4
 
 _SEND_KEYS_SCRIPT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), 'send_keys.vbs')

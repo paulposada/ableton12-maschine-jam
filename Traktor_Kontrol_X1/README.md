@@ -101,8 +101,10 @@ Template **Basic** del Controller Editor, todo por el **Canal MIDI 2**.
 |---|---|---|---|
 | **FX 1 (izq)** | 20 | Mostrar / ocultar Browser | Encendido si el navegador está visible |
 | **FX 2 (izq)** | 22 | Alternar vista Session ⇄ Arrangement | Encendido en Arrangement, apagado en Session |
-| **FX 1 (der)** | 21 | Mostrar / ocultar vista Clip / Detalle | Encendido si la vista Clip está abierta |
-| **FX 2 (der)** | 23 | Mostrar / ocultar vista Devices | Encendido si la cadena de Devices está visible |
+| **FX 1 (der)** | 21 | Mostrar / ocultar vista Clip (atajo Ctrl+Alt+3) | Encendido si la vista Clip está abierta |
+| **FX 2 (der)** | 23 | Mostrar / ocultar vista Devices (atajo Ctrl+Alt+4) | Encendido si la cadena de Devices está visible |
+
+> Clip y Devices son independientes (pueden estar ambas abiertas). La API de scripts de Live solo permite ver una a la vez, así que el script envía los atajos de Live 12 **Ctrl+Alt+3 / Ctrl+Alt+4** a la ventana de Live (solo Windows).
 
 ---
 

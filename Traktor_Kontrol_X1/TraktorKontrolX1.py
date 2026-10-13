@@ -12,7 +12,7 @@ from _Framework.SessionRecordingComponent import SessionRecordingComponent
 from _Framework.TransportComponent import TransportComponent
 from _Framework.ViewControlComponent import ViewControlComponent
 
-from . import config, midi_debug, views
+from . import config, live_keys, midi_debug, views
 from .actions import ActionButtons
 from .arrangement import ArrangementNavigationComponent
 from .browser import BrowserNavigationComponent
@@ -36,6 +36,7 @@ class TraktorKontrolX1(ControlSurface):
         self._state_leds = StateLeds()
         self._actions = ActionButtons(self._elements, self._state_leds)
         self._song_actions = SongActions(self.song)
+        self._key_sender = create_key_sender(self._report)
         self._selection = SelectionNavigator(
             self.song, self.application, self.show_message)
         with self.component_guard():
@@ -91,7 +92,7 @@ class TraktorKontrolX1(ControlSurface):
 
     def _setup_browser(self):
         self._browser = BrowserNavigationComponent(
-            create_key_sender(self._report), name='Browser_Navigation')
+            self._key_sender, name='Browser_Navigation')
         self._browser.set_controls(
             self._elements.encoder(Browser.SCROLL),
             self._elements.encoder(Browser.FOLDER),
@@ -106,16 +107,20 @@ class TraktorKontrolX1(ControlSurface):
         self._actions.bind(Views.SESSION_ARRANGEMENT,
                            self._toggle_session_arrangement,
                            state=self._view_state(views.ARRANGER))
-        for cc, view_name in ((Views.CLIP, views.CLIP),
-                              (Views.DEVICES, views.DEVICES)):
-            self._actions.bind(cc, self._view_toggler(view_name),
-                               state=self._view_state(view_name))
+        # Clip y Devices se alternan con los atajos de Live 12: la API solo
+        # deja ver una de las dos vistas a la vez
+        self._actions.bind(Views.CLIP,
+                           self._shortcut(live_keys.TOGGLE_CLIP_VIEW),
+                           state=self._view_state(views.CLIP))
+        self._actions.bind(Views.DEVICES,
+                           self._shortcut(live_keys.TOGGLE_DEVICE_VIEW),
+                           state=self._view_state(views.DEVICES))
 
     def _toggle_session_arrangement(self):
         views.toggle_session_arrangement(self.application().view)
 
-    def _view_toggler(self, view_name):
-        return lambda: views.toggle(self.application().view, view_name)
+    def _shortcut(self, keys):
+        return lambda: self._key_sender.send(keys)
 
     def _view_state(self, view_name):
         return lambda: views.is_visible(self.application().view, view_name)
