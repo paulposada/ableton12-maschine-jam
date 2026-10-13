@@ -35,81 +35,122 @@ Para que el hardware se comunique correctamente con este script de Python, debes
 
 ---
 
-## 🗺️ Mapeos Actuales (Current Mappings)
+## 🗺️ Mapeos Actuales (Diagrama Visual)
 
-Template **Basic** del Controller Editor, todo por el **Canal MIDI 2**. Cada deck tiene un tema: el izquierdo **reproduce** y el derecho **graba**.
+> 💡 **¿Prefieres una referencia gráfica completa?**  
+> Consulta la **[Guía Visual del Mapeo (GUIA_VISUAL.md)](GUIA_VISUAL.md)** o abre la imagen vectorial **[traktor_x1_layout.svg](traktor_x1_layout.svg)**.
 
-### 1. Deck izquierdo — Reproducir
-| Botón | CC | Función |
-|---|---|---|
-| PLAY | 40 | Play / Pausa |
-| SYNC | 42 | Metrónomo |
-| CUE | 36 | Stop (2 veces = volver al inicio) |
-| CUP | 38 | Tap Tempo |
-| ◀ BEAT / BEAT ▶ | 32 / 34 | Rebobinar / Avanzar (mantener) |
-| IN | 28 | Loop on/off |
-| OUT | 30 | Follow (la vista sigue la reproducción) |
+Template **Basic** del Controller Editor, todo por el **Canal MIDI 2**.
 
-### 2. Deck derecho — Grabar
-| Botón | CC | Función |
-|---|---|---|
-| PLAY | 41 | Grabar en Arrangement ● |
-| SYNC | 43 | Grabar en Session |
-| CUE | 37 | Automation Arm |
-| CUP | 39 | Re-enable Automation |
-| ◀ BEAT / BEAT ▶ | 33 / 35 | Undo / Redo |
-| IN | 29 | Capture MIDI |
-| OUT | 31 | Arrangement Overdub (MIDI +) |
+![Diagrama Visual Traktor Kontrol X1](traktor_x1_layout.svg)
 
-### 3. Botones FX — Vistas
-| Botón | CC | Función |
-|---|---|---|
-| FX1 izq. | 20 | Mostrar / ocultar Browser |
-| FX2 izq. | 22 | Session ⇄ Arrangement |
-| FX1 der. | 21 | Mostrar / ocultar vista Clip |
-| FX2 der. | 23 | Mostrar / ocultar vista Devices |
+### 📐 Esquema Rápido del Controlador
 
-### 4. Encoders inferiores — Browser
-Cualquier giro o push le da el foco al Browser (ya no hace falta hacer click en él).
-
-| Control | CC | Función |
-|---|---|---|
-| Giro izq. | 26 | Subir / bajar |
-| Push izq. | 24 | Cargar lo seleccionado (si es carpeta, la abre) |
-| Giro der. | 27 | Cerrar / abrir carpeta |
-| Push der. | 25 | Preescuchar |
-
-### 5. Encoders superiores — Arrangement
-| Control | CC | Función |
-|---|---|---|
-| Giro izq. | 16 | Zoom |
-| Giro der. | 17 | Mover izquierda / derecha |
-
-### 6. Sección superior — Device seleccionado
-Las perillas controlan el device que tiene la "mano azul" (sigue a la pista y al device seleccionados). En los botones ON y 1, la columna izquierda va **hacia atrás** y la derecha **hacia adelante**. Los botones 2 y 3 navegan: a la izquierda **devices**, a la derecha **pistas** (2 = anterior, 3 = siguiente).
-
-| Control | CC | Función |
-|---|---|---|
-| 8 perillas | 0–7 | Parámetros 1–8 del device (orden de lectura: izq→der, arriba→abajo) |
-| ON izq. / ON der. | 8 / 9 | Encender/apagar device / Armar pista seleccionada |
-| 1 izq. / 1 der. | 10 / 11 | Banco de parámetros anterior / siguiente |
-| 2 izq. / 3 izq. | 12 / 14 | Device anterior / siguiente |
-| 2 der. / 3 der. | 13 / 15 | Pista anterior / siguiente |
-
-**Modo de las perillas** (usa la página *Shift* del template, manteniendo SHIFT):
-
-| Control | CC | Función |
-|---|---|---|
-| SHIFT + ON izq. | 52 | Perillas = **macros / parámetros** del device (modo por defecto) |
-| SHIFT + ON der. | 53 | Perillas = **sends A–H** de la pista seleccionada |
-
-En modo Sends las perillas siguen a la pista seleccionada; si la pista tiene menos returns, las perillas sobrantes no hacen nada.
-
-Para cambiar una asignación, edita el número en `config.py`. Para depurar, pon `DEBUG_MIDI = True` en `config.py` y el script escribirá en `Log.txt` todo el MIDI que recibe.
+```text
+  [ CC 8 ] (Device On/Off)      (( CC 0 )) (( CC 1 ))      [ CC 9 ] (Armar Pista)
+  [ CC 10 ] (◀ Banco Prev)      (( CC 2 )) (( CC 3 ))      [ CC 11 ] (Banco Next ▶)
+  [ CC 12 ] (◀ Device Prev)     (( CC 4 )) (( CC 5 ))      [ CC 13 ] (◀ Pista Prev)
+  [ CC 14 ] (Device Next ▶)     (( CC 6 )) (( CC 7 ))      [ CC 15 ] (Pista Next ▶)
+ -----------------------------------------------------------------------------------
+  (( CC 16 )) Zoom Arr.              [ SHIFT ]             (( CC 17 )) Scroll Arr.
+ -----------------------------------------------------------------------------------
+  [ CC 20 ] Toggle Browser    [ CC 22 ] Sess ⇄ Arr   |   [ CC 21 ] Clip   [ CC 23 ] Devices
+ -----------------------------------------------------------------------------------
+  (( CC 26 )) Browser Scroll (Push 24: Cargar)   |   (( CC 27 )) Carpeta (Push 25: Preescucha)
+ ===================================================================================
+        DECK IZQUIERDO (REPRODUCCIÓN)        |       DECK DERECHO (GRABACIÓN)
+ --------------------------------------------+--------------------------------------
+  [ CC 28 ] Loop       [ CC 30 ] Follow      |   [ CC 29 ] Capture    [ CC 31 ] Overdub
+  [ CC 32 ] ◀ Rebobinar [ CC 34 ] Avanzar ▶  |   [ CC 33 ] ↩ Undo     [ CC 35 ] Redo ↪
+  [ CC 36 ] ⏹ Stop     [ CC 38 ] Tap Tempo   |   [ CC 37 ] Auto Arm   [ CC 39 ] Re-enable Auto
+  [ CC 40 ] ▶ Play     [ CC 42 ] Metrónomo   |   [ CC 41 ] ● Rec Arr. [ CC 43 ] ● Rec Sess.
+```
 
 ---
 
-### 7. LEDs
+### 1. Deck izquierdo — Reproducción (Transporte)
+| Botón Hardware | CC | Función en Ableton Live | Comportamiento LED |
+|---|---|---|---|
+| **PLAY** | 40 | Play / Pausa | Encendido cuando la canción está reproduciéndose |
+| **SYNC** | 42 | Metrónomo On / Off | Refleja el estado del metrónomo en Live |
+| **CUE \| REL** | 36 | Stop (**2 pulsaciones** = volver al compás 1.1.1) | Feedback momentáneo al pulsar |
+| **CUP \| ABS** | 38 | Tap Tempo | Parpadea con las pulsaciones de tap |
+| **◀ BEAT** | 32 | Rebobinar en Arrangement | Encendido mientras se mantiene pulsado |
+| **BEAT ▶** | 34 | Avanzar en Arrangement | Encendido mientras se mantiene pulsado |
+| **IN** | 28 | Loop Activo / Inactivo | Encendido si el loop de Arrangement está activado |
+| **OUT \| 4** | 30 | Follow (la vista sigue al cabezal) | Encendido si Follow está activado en Live |
+
+---
+
+### 2. Deck derecho — Grabación y Edición
+| Botón Hardware | CC | Función en Ableton Live | Comportamiento LED |
+|---|---|---|---|
+| **PLAY** | 41 | Grabar en Arrangement (●) | Encendido cuando la grabación global está activa |
+| **SYNC** | 43 | Grabar en Session | Encendido cuando Session Record está activo |
+| **CUE \| REL** | 37 | Automation Arm | Refleja si la automatización está armada |
+| **CUP \| ABS** | 39 | Re-enable Automation | Encendido si hay automatizaciones sobreescritas pendientes |
+| **◀ BEAT** | 33 | Deshacer (**Undo**) | Momentáneo al pulsar |
+| **BEAT ▶** | 35 | Rehacer (**Redo**) | Momentáneo al pulsar |
+| **IN** | 29 | **Capture MIDI** (recupera notas improvisadas) | Encendido si hay material disponible para capturar |
+| **OUT \| 4** | 31 | Arrangement Overdub (MIDI +) | Refleja estado de MIDI Overdub |
+
+---
+
+### 3. Botones FX — Conmutación de Vistas
+| Botón Hardware | CC | Función en Ableton Live | Comportamiento LED |
+|---|---|---|---|
+| **FX 1 (izq)** | 20 | Mostrar / ocultar Browser | Encendido si el navegador está visible |
+| **FX 2 (izq)** | 22 | Alternar vista Session ⇄ Arrangement | Encendido en Arrangement, apagado en Session |
+| **FX 1 (der)** | 21 | Mostrar / ocultar vista Clip / Detalle | Encendido si la vista Clip está abierta |
+| **FX 2 (der)** | 23 | Mostrar / ocultar vista Devices | Encendido si la cadena de Devices está visible |
+
+---
+
+### 4. Encoders inferiores — Navegación del Browser (Autofocus)
+*Cualquier acción sobre estos encoders da el foco automáticamente al Browser sin usar el ratón.*
+
+| Control Hardware | CC | Acción | Función en Ableton Live |
+|---|---|---|---|
+| **Giro Izquierdo** | 26 | Giro relativo | Mover selección hacia arriba o hacia abajo en la lista |
+| **Push Izquierdo** | 24 | Presionar | **Cargar elemento seleccionado** (si es carpeta, la abre) |
+| **Giro Derecho** | 27 | Giro relativo | **Cerrar (izq) o Abrir (der)** carpetas en el árbol |
+| **Push Derecho** | 25 | Presionar | **Preescuchar** sample seleccionado (Prehear / Preview) |
+
+---
+
+### 5. Encoders superiores — Vista Arrangement
+| Control Hardware | CC | Acción | Función en Ableton Live |
+|---|---|---|---|
+| **Giro Izquierdo** | 16 | Giro relativo | **Zoom Horizontal** (acercar / alejar la línea de tiempo) |
+| **Giro Derecho** | 17 | Giro relativo | **Scroll Horizontal** (desplazarse a izquierda / derecha) |
+
+---
+
+### 6. Sección Superior — Dispositivo (Device) y Pistas (Track)
+Las 8 perillas controlan automáticamente el dispositivo que tiene la **"mano azul"** en Live.
+
+| Control Hardware | CC | Función en Ableton Live |
+|---|---|---|
+| **8 Perillas (CC 0–7)** | 0–7 | Parámetros 1 a 8 del Device (orden: fila 1 [0,1], fila 2 [2,3], fila 3 [4,5], fila 4 [6,7]) |
+| **ON (izq)** | 8 | Encender / apagar dispositivo seleccionado |
+| **ON (der)** | 9 | Armar para grabación la pista seleccionada |
+| **1 (izq) / 1 (der)** | 10 / 11 | Banco de parámetros anterior (◀) / siguiente (▶) |
+| **2 (izq) / 3 (izq)** | 12 / 14 | Dispositivo anterior (◀) / siguiente (▶) en la cadena |
+| **2 (der) / 3 (der)** | 13 / 15 | Pista anterior (◀) / siguiente (▶) en el set |
+
+#### 🔄 Modos Alternativos de las Perillas (Página Shift)
+Manteniendo presionado el botón **SHIFT** del hardware:
+
+| Combinación | CC | Función |
+|---|---|---|
+| **SHIFT + ON (izq)** | 52 | Las 8 perillas controlan **Macros / Parámetros** del Device (modo por defecto) |
+| **SHIFT + ON (der)** | 53 | Las 8 perillas controlan los **Sends A–H** de la pista seleccionada |
+
+> En modo Sends, las perillas mapean dinámicamente a los canales de Retorno activos en Live.
+
+---
+
+### 7. LEDs y Diagnóstico
 Al cargar el script, **todos los LEDs se encienden medio segundo** (prueba de que el X1 recibe el feedback) y luego muestran el estado real:
 
 * **Estado de Live:** Play, Metrónomo, Loop, Rec, Session Rec, Overdub, Automation Arm/Re-enable, Device on/off, Follow, Arm de la pista, Capture MIDI (encendido si hay algo que capturar), vistas visibles (Browser, Arrangement, Clip, Devices) y modo de perillas (SHIFT + ON).
