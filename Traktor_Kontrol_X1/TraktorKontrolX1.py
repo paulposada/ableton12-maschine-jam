@@ -335,10 +335,22 @@ class TraktorKontrolX1(ControlSurface):
             track.arm = not track.arm
 
     def _select_device(self, direction):
-        app_view = self.application().view
-        app_view.show_view('Detail/DeviceChain')
-        app_view.scroll_view(
-            NavDirection.right if direction > 0 else NavDirection.left, 'Detail/DeviceChain', False)
+        song = self.song()
+        track = song.view.selected_track
+        devices = list(track.devices)
+        if not devices:
+            self.show_message('X1: la pista "%s" no tiene devices' % track.name)
+            return
+        current = track.view.selected_device
+        index = next((i for i, d in enumerate(devices) if d == current), -1)
+        if index < 0:
+            index = 0 if direction > 0 else len(devices) - 1
+        else:
+            index = max(0, min(len(devices) - 1, index + direction))
+        device = devices[index]
+        song.view.select_device(device)
+        self.application().view.show_view('Detail/DeviceChain')
+        self.show_message('X1 Device: %s (%d/%d)' % (device.name, index + 1, len(devices)))
 
     def _select_track(self, direction):
         song = self.song()
