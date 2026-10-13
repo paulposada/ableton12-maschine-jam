@@ -13,6 +13,7 @@ from _Framework.ControlSurfaceComponent import ControlSurfaceComponent
 from _Framework.ClipCreator import ClipCreator
 from _Framework.ViewControlComponent import ViewControlComponent
 from _Framework.DeviceComponent import DeviceComponent
+from _Framework.MixerComponent import MixerComponent
 
 # Canal MIDI del X1 (Live cuenta desde 0: 1 = Canal 2 en el Controller Editor)
 CHANNEL = 1
@@ -87,6 +88,10 @@ CC_DEVICE_PREV = 12       # 2 izq.      -> Device anterior
 CC_DEVICE_NEXT = 14       # 3 izq.      -> Device siguiente
 CC_TRACK_PREV = 13        # 2 der.      -> Pista anterior
 CC_TRACK_NEXT = 15        # 3 der.      -> Pista siguiente
+
+# Modo de las perillas (pagina Shift del template: SHIFT + boton ON)
+CC_KNOBS_MACROS = 52      # SHIFT + ON izq. -> Perillas = parametros/macros del device
+CC_KNOBS_SENDS = 53       # SHIFT + ON der. -> Perillas = sends A..H de la pista seleccionada
 
 
 def relative_direction(value):
@@ -318,9 +323,15 @@ class TraktorKontrolX1(ControlSurface):
         # El DeviceComponent sigue al device seleccionado (la "mano azul" de Live)
         self._device = DeviceComponent(
             device_selection_follows_track_selection=True, name='Device')
-        self._device.set_parameter_controls(tuple(
+        self._knobs = tuple(
             EncoderElement(MIDI_CC_TYPE, CHANNEL, cc, Live.MidiMap.MapMode.absolute)
-            for cc in CC_DEVICE_PARAMS))
+            for cc in CC_DEVICE_PARAMS)
+        # El canal "seleccionado" del mixer sigue a la pista seleccionada en Live
+        self._mixer = MixerComponent(name='Mixer')
+        self._knob_mode = None
+        self._set_knob_mode('macros', announce=False)
+        self._action_button(CC_KNOBS_MACROS, lambda: self._set_knob_mode('macros'))
+        self._action_button(CC_KNOBS_SENDS, lambda: self._set_knob_mode('sends'))
         self._device.set_on_off_button(self._button(CC_DEVICE_ON_OFF))
         self._device.set_bank_nav_buttons(self._button(CC_BANK_PREV), self._button(CC_BANK_NEXT))
         self.set_device_component(self._device)
@@ -329,6 +340,21 @@ class TraktorKontrolX1(ControlSurface):
         self._action_button(CC_DEVICE_NEXT, lambda: self._select_device(1))
         self._action_button(CC_TRACK_PREV, lambda: self._select_track(-1))
         self._action_button(CC_TRACK_NEXT, lambda: self._select_track(1))
+
+    def _set_knob_mode(self, mode, announce=True):
+        if mode == self._knob_mode:
+            return
+        self._knob_mode = mode
+        strip = self._mixer.selected_strip()
+        if mode == 'sends':
+            self._device.set_parameter_controls(None)
+            strip.set_send_controls(self._knobs)
+        else:
+            strip.set_send_controls(None)
+            self._device.set_parameter_controls(self._knobs)
+        if announce:
+            self.show_message('X1 Perillas: ' + (
+                'Sends A-H de la pista seleccionada' if mode == 'sends' else 'Macros / parametros del device'))
 
     def _toggle_arm(self):
         track = self.song().view.selected_track

@@ -96,6 +96,15 @@ Las perillas controlan el device que tiene la "mano azul" (sigue a la pista y al
 | 2 izq. / 3 izq. | 12 / 14 | Device anterior / siguiente |
 | 2 der. / 3 der. | 13 / 15 | Pista anterior / siguiente |
 
+**Modo de las perillas** (usa la página *Shift* del template, manteniendo SHIFT):
+
+| Control | CC | Función |
+|---|---|---|
+| SHIFT + ON izq. | 52 | Perillas = **macros / parámetros** del device (modo por defecto) |
+| SHIFT + ON der. | 53 | Perillas = **sends A–H** de la pista seleccionada |
+
+En modo Sends las perillas siguen a la pista seleccionada; si la pista tiene menos returns, las perillas sobrantes no hacen nada.
+
 Para cambiar una asignación, edita las constantes `CC_*` al inicio de `TraktorKontrolX1.py`. Para depurar, pon `DEBUG_MIDI = True` y el script escribirá en `Log.txt` todo el MIDI que recibe.
 
 ---
